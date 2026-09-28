@@ -23,19 +23,19 @@
 | Release 1.0 | Bolt 0–5 | Consolidación y hardening para el piloto |
 
 ## 3. Visión general
-| Release | Objetivo | Ventana (detalle §4) | CU |
+| Release | Objetivo | Ventana | CU |
 |---|---|---|---|
-| 0.1 | Walking Skeleton: flujo E2E mínimo | 15–28 sep 2026 | CU1–CU5 (mínimo) |
-| 0.2 | Captura resiliente y contacto comunal | 29 sep – 12 oct 2026 | CU1 completo |
-| 0.3 | Motor de riesgo y gobernanza algorítmica | 13–26 oct 2026 | CU2 completo |
-| 0.4 | Trámite municipal y estados tácticos | 27 oct – 9 nov 2026 | CU3 completo |
-| 0.5 | Despacho y reasignación táctica | 10–23 nov 2026 | CU4 completo |
-| 0.6 | Bitácora y cierre institucional | 24 nov – 7 dic 2026 | CU5 completo |
-| 1.0 | MVP piloto operativo (consolidación) | 8–21 dic 2026 | CU1–CU5 hardening |
+| 0.1 | Walking Skeleton: flujo E2E mínimo | 17–18 sep 2026 | CU1–CU5 (mínimo) |
+| 0.2 | Captura resiliente y contacto comunal | 19–20 sep 2026 | CU1 completo |
+| 0.3 | Motor de riesgo y gobernanza algorítmica | 21–22 sep 2026 | CU2 completo |
+| 0.4 | Trámite municipal y estados tácticos | 23–24 sep 2026 | CU3 completo |
+| 0.5 | Despacho y reasignación táctica | 25–26 sep 2026 | CU4 completo |
+| 0.6 | Bitácora y cierre institucional | 27–28 sep 2026 | CU5 completo |
+| 1.0 | MVP piloto operativo (consolidación) | 29–30 sep 2026 | CU1–CU5 hardening |
 
-> Nota: la tabla 4.1 del PDF indica ventanas de 2 días (17–18 sep … 29–30 sep); el detalle por bolt indica
-> ventanas de 2 semanas (las usadas arriba). **Confirmar con el PO cuál rige.** El Release 1.0 debe estar antes
-> de la temporada de incendios 2027 (mayo–octubre).
+> Ventanas de 2 días por bolt (tabla 4.1 del PDF, confirmado por el PO). Las fechas son orientativas;
+> lo que manda es el cierre de la DoD de cada bolt. El Release 1.0 debe estar antes de la temporada de
+> incendios 2027 (mayo–octubre).
 
 ## 4. Detalle por bolt
 
