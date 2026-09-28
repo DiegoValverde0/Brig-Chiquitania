@@ -1,6 +1,5 @@
 export enum NivelRiesgo {
-  BAJO = 'BAJO',
-  MEDIO = 'MEDIO',
-  ALTO = 'ALTO',
-  CRITICO = 'CRITICO',
+  Alto = 'Alto',
+  Medio = 'Medio',
+  Bajo = 'Bajo',
 }
