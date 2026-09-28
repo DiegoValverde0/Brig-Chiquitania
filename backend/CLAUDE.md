@@ -54,23 +54,30 @@ npm run build                         # verificación de tipos / compilación
 curl localhost:3000/api/health        # {"status":"ok","db":"up"}
 ```
 
-## Estado del modelo implementado vs. UML oficial (pendiente de alinear)
-El Walking Skeleton (PR #1) se creó antes de recibir el diccionario de clases. Diferencias a corregir,
-**previa aprobación del PO**:
+## Estado del modelo implementado vs. UML oficial
+Alineado en el Bolt 0 (PR A del plan aprobado por el PO el 28/09/2026):
+- Enums `EstadoIncidente`, `NivelRiesgo`, `EstadoBrigada` (renombrado desde `EstadoOperativo`), `TipoReporte` y
+  `ResultadoCierre` con los valores del UML. Se eliminó `EstadoAsignacion` (no existe en el UML).
+- `Coordenada` es un valor **embebido** (`@Column(() => Coordenada, { prefix: false })`): columnas `latitud`,
+  `longitud`, `precision_metros` en `incidente`, `comunidad` y `brigada`; ya no tiene tabla propia.
+- `Incidente`, `Comunidad` (nueva) ◆ `ContactoComunal`, `CartaMunicipal`, `Brigada`, `AsignacionDespacho` y
+  `HistorialEstado` (nueva) siguen el diccionario de clases.
+- `AuditoriaInmutableService` instala triggers en PostgreSQL al arrancar: `historial_estado` rechaza
+  UPDATE/DELETE/TRUNCATE; `incidente.fecha_reporte` y `asignacion_despacho.timestamp_confirmacion_llegada`
+  son write-once (RNF-07).
+- Inferencias: ids UUID también en `Comunidad` y `Brigada` (el UML dice `int`) por el cliente offline;
+  `HistorialEstado.estadoAnterior` agregado para reconstruir el ciclo; el "quién" llega con `Usuario` (Bolt 1).
 
-| Tema | UML / SRS oficial | Implementado |
-|---|---|---|
-| `EstadoIncidente` | Nuevo, Asignado, En atención, En Liquidación, Cerrado | Reportado, En_Triage, Validado, Despachado, Controlado, Cerrado |
-| `NivelRiesgo` | Alto, Medio, Bajo | BAJO, MEDIO, ALTO, CRITICO |
-| `EstadoBrigada` | Disponible, En Desplazamiento, En Combate Activo, En Liquidación | Disponible, En_Ruta, En_Operacion, En_Liquidacion, Fuera_De_Servicio |
-| `Incidente` | + tipoReporte, justificacionRiesgo, fechaReporte, resultadoCierre; 0..1 Comunidad; 0..1 EvidenciaFotografica; 1 Coordenada (composición) | nivelRiesgo, estado, descripcion, coordenada, reportante |
-| `ContactoComunal` | nombreAutoridad, telefono, cargo; compuesto por `Comunidad` (1–1) | nombre, telefono, comunidad (texto) |
-| `CartaMunicipal` | + fechaEmision; estadoTramite | archivoDigital, estadoTramite (enum) |
-| `Brigada` | + ubicacionActual (Coordenada) | nombre, estadoOperativo |
-| `AsignacionDespacho` | fechaAsignacion, rutaSugerida, timestampConfirmacionLlegada | fechaAsignacion, estado |
-| `Bitacora` | fecha, nivelAgua, nivelCombustible, herramientasOperativas, kmFajaMitigados, porcentajeControl; 0..* por Incidente | fechaHora, descripcion (texto libre) ligada a AsignacionDespacho |
-| `InformeConsolidado` | fechaGeneracion, contenidoPDF, tiempoTotalDespacho, justificacionFalsoPositivo; 0..1 por Incidente | resumen, fechaCierre, hectareasAfectadas; ligado a AsignacionDespacho |
-| Clases faltantes | Comunidad, EvidenciaFotografica, Notificacion, HistorialEstado, Usuario (+4 roles, inferencia) | — |
+Pendiente para bolts posteriores:
+
+| Tema | UML / SRS oficial | Implementado | Bolt |
+|---|---|---|---|
+| `Bitacora` | fecha, nivelAgua, nivelCombustible, herramientasOperativas, kmFajaMitigados, porcentajeControl; 0..* por Incidente | fechaHora, descripcion (texto libre) ligada a AsignacionDespacho | 5 |
+| `InformeConsolidado` | fechaGeneracion, contenidoPDF, tiempoTotalDespacho, justificacionFalsoPositivo; 0..1 por Incidente | resumen, fechaCierre, hectareasAfectadas; ligado a AsignacionDespacho | 5 |
+| Clases faltantes | EvidenciaFotografica (1), Usuario + 4 roles (1, inferencia), Notificacion (4) | — | — |
+
+Datos semilla (comunidades con contacto y brigadas, coordenadas aproximadas y contactos ficticios):
+`npm run build && npm run seed` (en Docker: `docker compose exec api node dist/seed`). Es idempotente.
 
 Además, la DoD del Bolt 0 exige el **flujo E2E mínimo** (reporte GPS → riesgo → panel → brigada sugerida →
-llegada → ΔT inmutable); hoy solo existe la infraestructura.
+llegada → ΔT inmutable); se implementa en el PR B.

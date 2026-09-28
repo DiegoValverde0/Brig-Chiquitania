@@ -1,8 +1,8 @@
+/** Ciclo de vida del incidente (SRS §2.2 / UML): Nuevo → Asignado → En atención → En Liquidación → Cerrado. */
 export enum EstadoIncidente {
-  Reportado = 'Reportado',
-  En_Triage = 'En_Triage',
-  Validado = 'Validado',
-  Despachado = 'Despachado',
-  Controlado = 'Controlado',
+  Nuevo = 'Nuevo',
+  Asignado = 'Asignado',
+  En_Atencion = 'En_Atencion',
+  En_Liquidacion = 'En_Liquidacion',
   Cerrado = 'Cerrado',
 }

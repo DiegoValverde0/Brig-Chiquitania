@@ -10,6 +10,9 @@ export class CartaMunicipal extends EntidadBase {
   @Column({ name: 'archivo_digital', type: 'varchar', length: 500 })
   archivoDigital: string;
 
+  @Column({ name: 'fecha_emision', type: 'date' })
+  fechaEmision: string;
+
   @Column({
     name: 'estado_tramite',
     type: 'enum',
