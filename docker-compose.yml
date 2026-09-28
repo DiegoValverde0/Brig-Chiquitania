@@ -1,0 +1,49 @@
+# Orquestación del Walking Skeleton (Bolt 0) para el VPS.
+# Límites de memoria pensados para un host de 1 GB de RAM.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: chiquitania_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-chiquitania}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-chiquitania_dev}
+      POSTGRES_DB: ${DB_NAME:-chiquitania_db}
+    command: >
+      postgres
+      -c shared_buffers=128MB
+      -c max_connections=30
+      -c work_mem=4MB
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    mem_limit: 384m
+
+  api:
+    build:
+      context: ./backend
+    container_name: chiquitania_api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-chiquitania}
+      DB_PASSWORD: ${DB_PASSWORD:-chiquitania_dev}
+      DB_NAME: ${DB_NAME:-chiquitania_db}
+      DB_SYNCHRONIZE: ${DB_SYNCHRONIZE:-true}
+    ports:
+      - "3000:3000"
+    mem_limit: 320m
+
+volumes:
+  pgdata:
