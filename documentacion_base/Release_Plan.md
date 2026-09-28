@@ -99,5 +99,5 @@
 ## 6. Estado de ejecución
 | Bolt | Estado | Notas |
 |---|---|---|
-| Bolt 0 | 🟡 En curso | Infraestructura lista (PR #1: NestJS + TypeORM + PostgreSQL + Docker, 5 módulos `core.*`, entidades base). **Pendiente:** alinear entidades al diccionario de clases (`backend/CLAUDE.md`) y construir el flujo E2E mínimo que exige la DoD. |
+| Bolt 0 | 🟡 En revisión del PO | Infraestructura (PR #1), modelo alineado al UML + semilla (PR #3) y flujo E2E con auditoría append-only y pruebas automatizadas (PR B). Se cierra cuando el PO apruebe el PR B. |
 | Bolt 1–5, 1.0 | ⚪ No iniciado | — |
