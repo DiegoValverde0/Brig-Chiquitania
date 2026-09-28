@@ -52,7 +52,21 @@ docker compose up -d db               # solo BD
 cd backend && cp .env.example .env && npm ci && npm run start:dev
 npm run build                         # verificación de tipos / compilación
 curl localhost:3000/api/health        # {"status":"ok","db":"up"}
+npm test                              # unitarias (sin BD)
+npm run test:e2e                      # flujo E2E contra PostgreSQL (BD chiquitania_test, se recrea)
+sh scripts/flujo-e2e.sh               # mismo flujo por curl contra una API en marcha con semilla
 ```
+
+## Flujo E2E del Bolt 0 (endpoints en README raíz)
+- Validación manual de payloads (`common/validacion.ts`), sin class-validator, por memoria.
+- Transiciones de estado siempre en una transacción que inserta en `historial_estado` vía
+  `HistorialEstadoService` (única vía de escritura).
+- Guardas de despacho: riesgo Alto/Medio, `CartaMunicipal` no rechazada (Ley 602), `ContactoComunal` no vacío,
+  incidente en "Nuevo" y brigada "Disponible" (UPDATE condicional contra doble despacho).
+- Motor de riesgo (`MotorRiesgoService`): regla única <5 km ⇒ Alto, si no Bajo; asocia la comunidad más cercana.
+- Fechas de reporte y llegada: opcionales desde el cliente (captura offline), nunca en el futuro.
+- Ojo con TypeORM: `select` parcial sobre una columna embebida (`coordenadas: true`) devuelve el objeto vacío;
+  cargar la entidad completa.
 
 ## Estado del modelo implementado vs. UML oficial
 Alineado en el Bolt 0 (PR A del plan aprobado por el PO el 28/09/2026):
@@ -79,5 +93,3 @@ Pendiente para bolts posteriores:
 Datos semilla (comunidades con contacto y brigadas, coordenadas aproximadas y contactos ficticios):
 `npm run build && npm run seed` (en Docker: `docker compose exec api node dist/seed`). Es idempotente.
 
-Además, la DoD del Bolt 0 exige el **flujo E2E mínimo** (reporte GPS → riesgo → panel → brigada sugerida →
-llegada → ΔT inmutable); se implementa en el PR B.

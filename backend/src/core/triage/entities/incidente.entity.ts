@@ -43,4 +43,9 @@ export class Incidente extends EntidadBase {
   /** Multiplicidad 0..1 (Ley N.º 602): la carta municipal puede no existir aún. */
   @OneToOne(() => CartaMunicipal, (carta) => carta.incidente)
   cartaMunicipal?: Relation<CartaMunicipal> | null;
+
+  /** ΔT del KPI en minutos (HU-5.3): T_llegada − T_reporte. */
+  calcularTiempoDespacho(llegada: Date): number {
+    return (llegada.getTime() - this.fechaReporte.getTime()) / 60000;
+  }
 }
