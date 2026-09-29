@@ -105,41 +105,61 @@
     var o = actual && actual.orden;
     if (!o) return;
     var mensaje = $('mensaje-llegada');
+    
+    function enviar(pos) {
+      var payload = {};
+      if (pos) {
+        payload.latitud = Math.round(pos.coords.latitude * 1e6) / 1e6;
+        payload.longitud = Math.round(pos.coords.longitude * 1e6) / 1e6;
+        payload.precisionMetros = Math.round(pos.coords.accuracy * 10) / 10;
+      }
+      mensaje.textContent = 'Enviando confirmación…';
+      BrcApi.post('/asignaciones/' + o.asignacionId + '/llegada', payload).then(
+        function (res) {
+          $('confirmar-llegada').disabled = false;
+          mensaje.textContent = '✔ Llegada confirmada. ΔT = ' + res.datos.deltaMinutos + ' min desde el reporte.';
+          cargar();
+        },
+        function (e) {
+          $('confirmar-llegada').disabled = false;
+          mensaje.textContent = 'No se confirmó: ' + e.message;
+        },
+      );
+    }
+
     if (!('geolocation' in navigator)) {
-      mensaje.textContent = 'Este teléfono no tiene GPS disponible: avise la llegada por radio a la central.';
+      if (confirm('Este dispositivo no tiene GPS. ¿Desea confirmar su llegada manualmente?')) {
+        $('confirmar-llegada').disabled = true;
+        enviar(null);
+      }
       return;
     }
+    
     $('confirmar-llegada').disabled = true;
     mensaje.textContent = 'Buscando señal GPS…';
     navigator.geolocation.getCurrentPosition(
       function (pos) {
         var precision = Math.round(pos.coords.accuracy * 10) / 10;
         if (precision > PRECISION_LLEGADA_M) {
-          $('confirmar-llegada').disabled = false;
-          mensaje.textContent = 'Precisión insuficiente (±' + Math.round(precision) + ' m). Reintente a cielo abierto.';
+          if (confirm('La señal GPS es muy débil (Precisión: ±' + Math.round(precision) + ' m). ¿Confirma que ya llegó al lugar usando estas coordenadas aproximadas?')) {
+            enviar(pos);
+          } else {
+            $('confirmar-llegada').disabled = false;
+            mensaje.textContent = 'Cancelado. Reintente a cielo abierto.';
+          }
           return;
         }
-        BrcApi.post('/asignaciones/' + o.asignacionId + '/llegada', {
-          latitud: Math.round(pos.coords.latitude * 1e6) / 1e6,
-          longitud: Math.round(pos.coords.longitude * 1e6) / 1e6,
-          precisionMetros: precision,
-        }).then(
-          function (res) {
-            $('confirmar-llegada').disabled = false;
-            mensaje.textContent = '✔ Llegada confirmada. ΔT = ' + res.datos.deltaMinutos + ' min desde el reporte.';
-            cargar();
-          },
-          function (e) {
-            $('confirmar-llegada').disabled = false;
-            mensaje.textContent = 'No se confirmó: ' + e.message;
-          },
-        );
+        enviar(pos);
       },
-      function () {
-        $('confirmar-llegada').disabled = false;
-        mensaje.textContent = 'No se obtuvo señal GPS. Reintente a cielo abierto.';
+      function (err) {
+        if (confirm('Fallo al obtener ubicación GPS. ¿Desea confirmar su llegada manualmente (sin coordenadas)?')) {
+          enviar(null);
+        } else {
+          $('confirmar-llegada').disabled = false;
+          mensaje.textContent = 'Cancelado por falla de GPS.';
+        }
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 60000 },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
     );
   }
 

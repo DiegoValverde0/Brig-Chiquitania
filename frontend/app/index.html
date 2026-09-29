@@ -7,7 +7,7 @@
   <title>Focos de calor — Chiquitanía</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icono.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/app.css?v=2">
 </head>
 <body>
   <!-- Inicio de sesión: el coordinador entrega el token de acceso a cada usuario (RNF-08). -->
@@ -15,9 +15,10 @@
     <h1>Reporte de focos de calor</h1>
     <p class="nota">Chiquitanía · Gobernación de Santa Cruz</p>
     <form id="form-login" class="tarjeta">
-      <label for="token">Código de acceso</label>
-      <input id="token" name="token" type="password" autocomplete="current-password" required
-             placeholder="Entregado por la central">
+      <div class="campo-flotante">
+        <input id="token" name="token" type="password" autocomplete="current-password" required placeholder=" ">
+        <label for="token">Código de acceso</label>
+      </div>
       <button type="submit" class="boton boton-principal">Entrar</button>
       <p id="error-login" class="error" role="alert"></p>
     </form>
@@ -34,11 +35,21 @@
 
     <!-- Pestañas por rol (app.js decide cuáles ve cada uno; la API también lo exige: RNF-08). -->
     <nav id="pestanas" class="pestanas" role="tablist" hidden>
-      <button type="button" role="tab" id="tab-reportar" aria-selected="true" aria-controls="panel-reportar">Reportar</button>
-      <button type="button" role="tab" id="tab-panel" aria-selected="false" aria-controls="panel-panel" hidden>Panel COED</button>
-      <button type="button" role="tab" id="tab-evaluacion" aria-selected="false" aria-controls="panel-evaluacion" hidden>Evaluación</button>
-      <button type="button" role="tab" id="tab-cartas" aria-selected="false" aria-controls="panel-cartas" hidden>Cartas</button>
-      <button type="button" role="tab" id="tab-brigada" aria-selected="false" aria-controls="panel-brigada" hidden>Mi brigada</button>
+      <button type="button" role="tab" id="tab-reportar" aria-selected="true" aria-controls="panel-reportar">
+        <span class="icono">📝</span><span class="texto">Reportar</span>
+      </button>
+      <button type="button" role="tab" id="tab-panel" aria-selected="false" aria-controls="panel-panel" hidden>
+        <span class="icono">📊</span><span class="texto">Panel</span>
+      </button>
+      <button type="button" role="tab" id="tab-evaluacion" aria-selected="false" aria-controls="panel-evaluacion" hidden>
+        <span class="icono">⚖️</span><span class="texto">Riesgo</span>
+      </button>
+      <button type="button" role="tab" id="tab-cartas" aria-selected="false" aria-controls="panel-cartas" hidden>
+        <span class="icono">📄</span><span class="texto">Cartas</span>
+      </button>
+      <button type="button" role="tab" id="tab-brigada" aria-selected="false" aria-controls="panel-brigada" hidden>
+        <span class="icono">🚒</span><span class="texto">Brigada</span>
+      </button>
     </nav>
 
     <!-- HU-3.1 / RF-07 / RF-08 (Figura 9): Kanban del COED, solo coordinador -->
@@ -46,20 +57,20 @@
       <form id="filtros-panel" class="filtros" onsubmit="return false">
         <fieldset class="segmentado" id="filtro-carta">
           <legend>Carta municipal (Ley 602)</legend>
-          <label><input type="radio" name="carta" value="" checked> Todos</label>
-          <label><input type="radio" name="carta" value="con"> Con carta</label>
-          <label><input type="radio" name="carta" value="sin"> Sin carta</label>
-          <label><input type="radio" name="carta" value="por_validar"> Por validar</label>
+          <label class="segmentado-opcion"><input type="radio" name="carta" value="" checked> <span>Todos</span></label>
+          <label class="segmentado-opcion"><input type="radio" name="carta" value="con"> <span>Con carta</span></label>
+          <label class="segmentado-opcion"><input type="radio" name="carta" value="sin"> <span>Sin carta</span></label>
+          <label class="segmentado-opcion"><input type="radio" name="carta" value="por_validar"> <span>Por validar</span></label>
         </fieldset>
         <fieldset class="segmentado" id="filtro-riesgo">
           <legend>Riesgo</legend>
-          <label><input type="checkbox" name="riesgo" value="Alto"> Alto</label>
-          <label><input type="checkbox" name="riesgo" value="Medio"> Medio</label>
-          <label><input type="checkbox" name="riesgo" value="Bajo"> Bajo</label>
+          <label class="segmentado-opcion"><input type="checkbox" name="riesgo" value="Alto"> <span>Alto</span></label>
+          <label class="segmentado-opcion"><input type="checkbox" name="riesgo" value="Medio"> <span>Medio</span></label>
+          <label class="segmentado-opcion"><input type="checkbox" name="riesgo" value="Bajo"> <span>Bajo</span></label>
         </fieldset>
-        <div class="buscar">
-          <label for="filtro-comunidad">Comunidad</label>
-          <input id="filtro-comunidad" type="text" maxlength="120" placeholder="Buscar…" autocomplete="off">
+        <div class="buscar campo-flotante" style="margin-top: 12px;">
+          <input id="filtro-comunidad" type="text" maxlength="120" placeholder=" " autocomplete="off">
+          <label for="filtro-comunidad">Buscar comunidad…</label>
         </div>
       </form>
       <div class="barra-acciones">
@@ -101,16 +112,21 @@
     <!-- RF-08 / Acta ACTA-002 (acuerdo 4): el jefe reporta "En Liquidación / Por finalizar" -->
     <section id="panel-brigada" role="tabpanel" hidden>
       <article id="mi-brigada" class="tarjeta">
-        <p class="nota">Cargando…</p>
+        <p class="nota esqueleto" style="width: 60%; height: 20px; display: block;">Cargando…</p>
       </article>
       <!-- HU-4.2: orden de salida (coordenadas, ruta en línea recta, contacto comunal, cronómetro) -->
       <article id="orden-salida" class="tarjeta orden" hidden>
-        <h2>Orden de salida</h2>
+        <div class="orden-cabecera">
+          <h2>Orden de salida</h2>
+          <span class="insignia estado-pendiente">¡Acción Requerida!</span>
+        </div>
         <p id="orden-foco"></p>
         <p class="lectura" id="orden-coordenadas"></p>
         <p id="orden-ruta"></p>
-        <p id="orden-contacto" class="destacado"></p>
-        <a id="orden-llamar" class="boton">📞 Llamar al referente comunal</a>
+        <div class="orden-contacto-box">
+          <p id="orden-contacto" class="destacado"></p>
+          <a id="orden-llamar" class="boton boton-llamar">📞 Llamar al referente</a>
+        </div>
         <p class="nota">Asignada hace <strong id="orden-cronometro">—</strong> · <span id="orden-aviso"></span></p>
         <button type="button" id="confirmar-llegada" class="boton boton-principal">📍 CONFIRMAR LLEGADA (GPS)</button>
         <p id="mensaje-llegada" class="nota" role="status"></p>
@@ -147,11 +163,20 @@
 
         <form id="form-reclasificar" class="reclasificar" novalidate>
           <h3>Reclasificar manualmente</h3>
-          <fieldset class="niveles">
-            <legend>Nuevo nivel</legend>
-            <label><input type="radio" name="nivel" value="Alto"> Alto</label>
-            <label><input type="radio" name="nivel" value="Medio"> Medio</label>
-            <label><input type="radio" name="nivel" value="Bajo"> Bajo</label>
+          <fieldset class="niveles modos">
+            <legend class="oculto">Nuevo nivel</legend>
+            <label class="opcion-segmentada riesgo-selector-alto">
+              <input type="radio" name="nivel" value="Alto">
+              <span>Alto</span>
+            </label>
+            <label class="opcion-segmentada riesgo-selector-medio">
+              <input type="radio" name="nivel" value="Medio">
+              <span>Medio</span>
+            </label>
+            <label class="opcion-segmentada riesgo-selector-bajo">
+              <input type="radio" name="nivel" value="Bajo">
+              <span>Bajo</span>
+            </label>
           </fieldset>
           <label for="justificacion">Justificación (obligatoria, mínimo 15 caracteres)
             <span id="contador" class="contador">0/15 car.</span></label>
@@ -161,14 +186,15 @@
         </form>
 
         <!-- Bolt 4 (decisión 7.2): un foco controlado vuelve a ser riesgoso; solo el coordinador lo reactiva -->
-        <section id="detalle-reactivar" class="carta" hidden>
+        <section id="detalle-reactivar" class="carta seccion-reactivar" hidden>
           <h3>Reactivar foco</h3>
-          <p class="nota">El foco estaba controlado (En liquidación) y vuelve a ser riesgoso: pasa a Nuevo con riesgo
-            Alto y encabeza el panel.</p>
+          <div class="aviso aviso-peligro">
+            <p><strong>⚠️ Atención:</strong> El foco estaba controlado (En liquidación) y vuelve a ser riesgoso: pasa a Nuevo con riesgo Alto y encabeza el panel.</p>
+          </div>
           <label for="justificacion-reactivar">Justificación (obligatoria, mínimo 15 caracteres)
             <span id="contador-reactivar" class="contador">0/15 car.</span></label>
           <textarea id="justificacion-reactivar" rows="2" maxlength="500" placeholder="Ej.: Rebrote con viento fuerte hacia la comunidad"></textarea>
-          <button type="button" id="reactivar-foco" class="boton boton-principal" disabled>⟳ REACTIVAR FOCO</button>
+          <button type="button" id="reactivar-foco" class="boton boton-peligro" disabled>⟳ REACTIVAR FOCO</button>
           <p id="mensaje-reactivar" class="nota" role="status"></p>
         </section>
         <p id="detalle-reactivado" class="aviso" hidden></p>
@@ -201,8 +227,14 @@
     <form id="form-reporte" class="tarjeta" novalidate>
       <fieldset class="modos">
         <legend class="oculto">¿Cómo ve el foco?</legend>
-        <label class="opcion"><input type="radio" name="modo" value="GPS" checked> Vi el foco de cerca</label>
-        <label class="opcion"><input type="radio" name="modo" value="Distancia"> Lo veo a la distancia</label>
+        <label class="opcion-segmentada">
+          <input type="radio" name="modo" value="GPS" checked>
+          <span>📍 Vi el foco de cerca</span>
+        </label>
+        <label class="opcion-segmentada">
+          <input type="radio" name="modo" value="Distancia">
+          <span>🔭 Lo veo a distancia</span>
+        </label>
       </fieldset>
 
       <section id="seccion-gps">
@@ -220,12 +252,14 @@
           <label><input type="radio" name="rumbo" value="E"> Este</label>
           <label><input type="radio" name="rumbo" value="O"> Oeste</label>
         </fieldset>
-        <label for="distancia">Distancia estimada (km)</label>
-        <input id="distancia" type="number" inputmode="decimal" min="0.1" max="50" step="0.1" placeholder="Ej.: 3">
+        <div class="campo-flotante" style="margin-top: 12px;">
+          <input id="distancia" type="number" inputmode="decimal" min="0.1" max="50" step="0.1" placeholder=" " required>
+          <label for="distancia">Distancia estimada (km)</label>
+        </div>
       </section>
 
       <section class="foto">
-        <label class="boton" for="archivo-foto">📷 Adjuntar foto (opcional)</label>
+        <label class="boton boton-secundario" for="archivo-foto">📷 Adjuntar foto (opcional)</label>
         <input id="archivo-foto" type="file" accept="image/*" capture="environment" hidden>
         <div id="vista-foto" hidden>
           <img id="miniatura" alt="Foto adjunta">
@@ -252,7 +286,10 @@
     <details class="tarjeta ajustes">
       <summary>Ajustes</summary>
       <p class="nota">Número de la central para SMS: <strong id="numero-central">—</strong></p>
-      <label class="opcion"><input type="checkbox" id="simular-sin-datos"> Simular falta de datos (pruebas del canal SMS)</label>
+      <label class="opcion switch-container">
+        <input type="checkbox" id="simular-sin-datos" class="switch">
+        <span>Simular falta de datos (modo SMS)</span>
+      </label>
       <p class="nota">Catálogo comunal: <span id="version-catalogo">sin descargar</span></p>
       <button type="button" id="cerrar-sesion" class="enlace">Cerrar sesión</button>
     </details>
@@ -286,6 +323,6 @@
   <script src="js/panel.js"></script>
   <script src="js/cartas.js"></script>
   <script src="js/brigada.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/app.js?v=2"></script>
 </body>
 </html>
