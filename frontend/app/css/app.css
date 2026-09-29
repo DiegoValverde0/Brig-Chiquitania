@@ -1551,6 +1551,111 @@ textarea {
   display: none;
 }
 
+/* ---------- Bolt 5: bitácora de turno, cierre e informes ---------- */
+.bitacora .checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  background: #eceff1;
+  padding: 6px;
+  border-radius: 12px;
+  margin: 10px 0 0;
+}
+
+.bitacora .checklist legend {
+  float: left;
+  width: 100%;
+  font-weight: 700;
+  margin: 2px 4px 6px;
+}
+
+.bitacora .checklist .opcion-segmentada {
+  flex: 1 1 40%;
+}
+
+.bitacora .checklist .opcion-segmentada span {
+  min-height: 52px;
+  font-size: 1.05rem;
+}
+
+/* Lo crítico se ve en rojo al marcarlo: se lee de un vistazo con guantes y sol. */
+.bitacora .opcion-segmentada.critico input:checked + span {
+  background: #ffebee;
+  color: var(--rojo-oscuro);
+  box-shadow: 0 0 0 2px #ef9a9a inset;
+}
+
+.contador-bitacora {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 56px 90px 56px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.contador-bitacora .etiqueta {
+  font-weight: 700;
+}
+
+.contador-bitacora output {
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.boton.paso {
+  width: 56px;
+  min-height: 52px;
+  margin: 0;
+  padding: 0;
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+#rango-control {
+  width: 100%;
+  height: 40px;
+  margin-top: 6px;
+  accent-color: var(--rojo);
+}
+
+.insignia.control {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.cierre-Controlado {
+  background: #e8f5e9;
+  color: var(--verde);
+}
+
+.cierre-Extendido {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.cierre-Falso_Positivo {
+  background: #eceff1;
+  color: #37474f;
+  border: 1px dashed #90a4ae;
+}
+
+.kpi {
+  font-weight: 600;
+}
+
+.sha,
+#informe-sha {
+  word-break: break-all;
+  font-size: 0.75rem;
+}
+
+.informe .boton,
+.cierre .boton {
+  min-height: 44px;
+}
+
 /* Accesibilidad y batería: sin animaciones si el sistema pide menos movimiento. */
 @media (prefers-reduced-motion: reduce) {
   *,

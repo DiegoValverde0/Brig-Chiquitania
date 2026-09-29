@@ -10,6 +10,7 @@ import { DataSource, EntityManager, Not } from 'typeorm';
 import { distanciaKm, rutaEnLineaRecta } from '../../common/geo';
 import { exigirNumero, exigirObjeto, exigirUuid } from '../../common/validacion';
 import { AuditoriaService } from '../operaciones/auditoria.service';
+import { BitacoraService } from '../operaciones/bitacora.service';
 import { TipoEventoAuditoria } from '../operaciones/enums/tipo-evento-auditoria.enum';
 import { HistorialEstadoService } from '../operaciones/historial-estado.service';
 import { ContactoComunal } from '../reporte/entities/contacto-comunal.entity';
@@ -57,6 +58,7 @@ export class DespachoService {
     private readonly brigadas: BrigadasService,
     private readonly auditoria: AuditoriaService,
     private readonly notificaciones: NotificacionesService,
+    private readonly bitacoras: BitacoraService,
   ) {}
 
   /**
@@ -75,9 +77,11 @@ export class DespachoService {
     ]);
     const paraDespacho = brigadas.map(aBrigadaParaDespacho);
     const brigadaDe = new Map(brigadas.filter((b) => b.incidente).map((b) => [b.incidente!.id, b.nombre]));
-    const notificaciones = await this.notificaciones.resumenPorIncidente(
-      incidentes.filter((i) => ESTADOS_INCIDENTE_ACTIVOS.includes(i.estado)).map((i) => i.id),
-    );
+    const activos = incidentes.filter((i) => ESTADOS_INCIDENTE_ACTIVOS.includes(i.estado)).map((i) => i.id);
+    const [notificaciones, control] = await Promise.all([
+      this.notificaciones.resumenPorIncidente(activos),
+      this.bitacoras.ultimoControl(activos),
+    ]);
     const tarjetas: TarjetaPanel[] = incidentes.map((i) => {
       const tieneCartaMunicipal = !!i.cartaMunicipal?.habilitaDespacho();
       const tieneContactoComunal = !!i.comunidad?.contacto?.validarNoVacio();
@@ -107,6 +111,7 @@ export class DespachoService {
         sugerencia: despacho.sugerencia,
         bloqueoDespacho: despacho.bloqueo,
         notificacion: notificaciones.get(i.id) ?? null,
+        porcentajeControl: control.get(i.id) ?? null,
       };
     });
     marcarPosiblesReactivaciones(tarjetas);

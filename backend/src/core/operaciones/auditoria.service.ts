@@ -10,7 +10,7 @@ export class AuditoriaService {
     em: EntityManager,
     evento: {
       tipo: TipoEventoAuditoria;
-      entidad: 'carta_municipal' | 'brigada';
+      entidad: 'carta_municipal' | 'brigada' | 'incidente';
       entidadId: string;
       incidenteId: string | null;
       detalle: string;

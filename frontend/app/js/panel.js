@@ -196,6 +196,9 @@
     if (t.reactivado) pie.appendChild(el('span', 'insignia reactivado', '⟳ Reactivado'));
     if (t.posibleReactivacion) pie.appendChild(el('span', 'insignia posible-reactivacion', 'Posible reactivación'));
     if (t.brigada) pie.appendChild(el('span', 'nota', '🚒 ' + t.brigada));
+    if (t.porcentajeControl !== null && t.porcentajeControl !== undefined) {
+      pie.appendChild(el('span', 'insignia control', '📈 ' + t.porcentajeControl + ' % control'));
+    }
     if (t.notificacion) {
       var aviso = t.notificacion.leida ? 'Leida' : t.notificacion.estado;
       var n = el('span', 'insignia aviso aviso-' + aviso, ETIQUETA_AVISO[aviso] + (aviso === 'Enviada' ? ' (' + (t.notificacion.canal === 'SMS' ? 'SMS' : 'push') + ')' : ''));

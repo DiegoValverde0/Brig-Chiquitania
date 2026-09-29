@@ -6,6 +6,8 @@ import { Rumbo } from '../../reporte/enums/rumbo.enum';
  *
  *   GPS:       BRC1 G <id> <lat> <lon> <precisión m> <hora>
  *   Distancia: BRC1 D <id> <comunidad> <rumbo N|S|E|O> <km> <hora>
+ *   Bitácora:  BRC1 B <foco> <id> <agua S|C> <combustible O|R> <herramientas 1|0> <km faja> <% control> <hora>
+ *              (Bolt 5, HU-5.2: la bitácora de turno también viaja por SMS en 2G)
  *
  * - <id> y <comunidad>: UUID en base64url (22 caracteres). El <id> es el mismo UUID que genera la app, así el
  *   reporte que llega por SMS y luego por datos no se duplica (RNF-01).
@@ -19,7 +21,18 @@ export const LARGO_MAXIMO_SMS = 160;
 
 export type ReporteSms =
   | { tipo: 'G'; id: string; latitud: number; longitud: number; precisionMetros: number; fecha: Date }
-  | { tipo: 'D'; id: string; comunidadId: string; rumbo: Rumbo; distanciaKm: number; fecha: Date };
+  | { tipo: 'D'; id: string; comunidadId: string; rumbo: Rumbo; distanciaKm: number; fecha: Date }
+  | {
+      tipo: 'B';
+      incidenteId: string;
+      id: string;
+      aguaSuficiente: boolean;
+      combustibleOk: boolean;
+      herramientasOperativas: boolean;
+      kmFajaMitigados: number;
+      porcentajeControl: number;
+      fecha: Date;
+    };
 
 export class ErrorSms extends Error {}
 
@@ -40,7 +53,20 @@ export function codificarReporte(r: ReporteSms): string {
   const partes =
     r.tipo === 'G'
       ? [PREFIJO_SMS, 'G', uuidACorto(r.id), numero(r.latitud, 5), numero(r.longitud, 5), String(Math.round(r.precisionMetros)), hora]
-      : [PREFIJO_SMS, 'D', uuidACorto(r.id), uuidACorto(r.comunidadId), r.rumbo, numero(r.distanciaKm, 1), hora];
+      : r.tipo === 'D'
+        ? [PREFIJO_SMS, 'D', uuidACorto(r.id), uuidACorto(r.comunidadId), r.rumbo, numero(r.distanciaKm, 1), hora]
+        : [
+            PREFIJO_SMS,
+            'B',
+            uuidACorto(r.incidenteId),
+            uuidACorto(r.id),
+            r.aguaSuficiente ? 'S' : 'C',
+            r.combustibleOk ? 'O' : 'R',
+            r.herramientasOperativas ? '1' : '0',
+            numero(r.kmFajaMitigados, 1),
+            String(Math.round(r.porcentajeControl)),
+            hora,
+          ];
   const texto = partes.join(' ');
   if (texto.length > LARGO_MAXIMO_SMS) throw new ErrorSms('El SMS supera los 160 caracteres');
   return texto;
@@ -84,6 +110,23 @@ export function decodificarReporte(texto: string): ReporteSms {
       rumbo: rumbo as Rumbo,
       distanciaKm: leerNumero(partes[5], 'distancia'),
       fecha: leerHora(partes[6]),
+    };
+  }
+  if (tipo === 'B' && partes.length === 10) {
+    const [agua, combustible, herramientas] = [partes[4], partes[5], partes[6]].map((p) => p.toUpperCase());
+    if (!['S', 'C'].includes(agua)) throw new ErrorSms('agua inválida (S o C)');
+    if (!['O', 'R'].includes(combustible)) throw new ErrorSms('combustible inválido (O o R)');
+    if (!['1', '0'].includes(herramientas)) throw new ErrorSms('herramientas inválidas (1 o 0)');
+    return {
+      tipo: 'B',
+      incidenteId: cortoAUuid(partes[2]),
+      id: cortoAUuid(partes[3]),
+      aguaSuficiente: agua === 'S',
+      combustibleOk: combustible === 'O',
+      herramientasOperativas: herramientas === '1',
+      kmFajaMitigados: leerNumero(partes[7], 'km de faja'),
+      porcentajeControl: leerNumero(partes[8], '% de control'),
+      fecha: leerHora(partes[9]),
     };
   }
   throw new ErrorSms('Formato de SMS no reconocido');

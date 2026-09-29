@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { OperacionesModule } from '../operaciones/operaciones.module';
 import { ReporteModule } from '../reporte/reporte.module';
 import { MensajeSms } from './sms/mensaje-sms.entity';
 import { crearPasarelaSms, PasarelaSms } from './sms/pasarela-sms';
@@ -17,7 +18,7 @@ import { SuscripcionPush } from './push/suscripcion-push.entity';
  * Bolt 4: canal Web Push (VAPID + aes128gcm sin librerías) para avisar el despacho al jefe de brigada.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([MensajeSms, SuscripcionPush]), ReporteModule],
+  imports: [TypeOrmModule.forFeature([MensajeSms, SuscripcionPush]), ReporteModule, OperacionesModule],
   controllers: [SmsController, PushController],
   providers: [
     SmsService,

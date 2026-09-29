@@ -22,13 +22,13 @@ backend/src/
 ├── crear-usuario.ts        # alta por consola (primer coordinador en producción)
 ├── generar-vapid.ts        # claves VAPID de Web Push para el .env del VPS (Bolt 4)
 ├── common/                 # entidad-base, validacion, geo, cifrado (AES-256-GCM), filtro de errores de cuerpo,
-│                           # almacén de archivos cifrados (fotos y cartas; tipo por firma de bytes)
+│                           # almacén de archivos cifrados (fotos, cartas, informes), generador de PDF propio (pdf.ts)
 └── core/
     ├── reporte/      (M1)  reporte GPS/distancia, evidencia fotográfica, catálogo comunal
     ├── triage/       (M2)  incidente, carta municipal (adjuntar/validar/rechazar), motor de riesgo, evaluación
     ├── despacho/     (M3 / M4)  panel COED, elegibilidad y despacho en 1 clic, reasignación táctica, estados
     │                            tácticos, notificaciones al jefe (push → SMS de respaldo)
-    ├── operaciones/  (M4 / M5)  llegada, ΔT, historial y evento_auditoria append-only
+    ├── operaciones/  (M4 / M5)  llegada, ΔT, bitácora de turno, cierre e informe PDF, historial y auditoría
     ├── seguridad/    (MT-2)  usuarios, roles, guard global
     └── sync/         (MT-1)  canal SMS: codec BRC1, pasarela (puerto + simulada), webhook, bandeja;
                               canal Web Push (claves VAPID, suscripciones, envío cifrado)
@@ -160,12 +160,24 @@ Bolt 4 (despacho y reasignación táctica):
 - Reasignación: el foco anterior sigue En Liquidación (decisión 7.5), con historial en ambos focos y
   `evento_auditoria` `ReasignacionTactica`. `PUT /api/brigadas/:id/jefe` asigna el jefe (decisión 7.4).
 
+Bolt 5 (bitácora y cierre institucional):
+- `Bitacora` (UML, 0..* por Incidente): `fecha`, `nivelAgua` (Suficiente | Critica), `nivelCombustible` (OK | Reserva),
+  `herramientasOperativas`, `kmFajaMitigados`, `porcentajeControl` [+ `controlRetrocede`, `canal`, brigada y usuario:
+  inferencia]. Id del teléfono (idempotente), append-only por trigger, sin `actualizado_en`. `leerBitacora`
+  (`operaciones/bitacora.ts`, función pura) rechaza cualquier campo que no sea del checklist (nunca texto libre).
+  Solo el jefe de la brigada asignada y solo En atención / En Liquidación. También por SMS `BRC1 B` (codec y app).
+- `InformeConsolidado` (UML, 0..1): `contenidoPDF` = ruta del PDF cifrado, `sha256`, `pesoKB`, `tiempoTotalDespacho`
+  (null sin llegada), `justificacionFalsoPositivo`, `resultado`; append-only por trigger. `CierreService.cerrar` hace
+  todo en una transacción (estado Cerrado + historial, libera la brigada que sigue ligada al foco, compila con
+  `informe.ts` y genera el PDF con `common/pdf.ts`). Reglas del PO: Controlado/Extendido tras la llegada; Falso
+  positivo desde cualquier estado activo con justificación ≥15. "Extendido" = supera la capacidad departamental
+  [inferencia a confirmar con el COED].
+- Dentro de una transacción, las consultas van en serie (nunca `Promise.all` con el mismo `em`: `pg` lo depreca).
+
 Pendiente para bolts posteriores:
 
 | Tema | UML / SRS oficial | Implementado | Bolt |
 |---|---|---|---|
-| `Bitacora` | fecha, nivelAgua, nivelCombustible, herramientasOperativas, kmFajaMitigados, porcentajeControl; 0..* por Incidente | fechaHora, descripcion (texto libre) ligada a AsignacionDespacho | 5 |
-| `InformeConsolidado` | fechaGeneracion, contenidoPDF, tiempoTotalDespacho, justificacionFalsoPositivo; 0..1 por Incidente | resumen, fechaCierre, hectareasAfectadas; ligado a AsignacionDespacho | 5 |
 | Bioma como factor de riesgo | RTM original: "distancia a población y bioma" | Diferido por el PO (sin datos de bioma) | — |
 | Migraciones | Esquema versionado antes del piloto | `synchronize` | 1.0 |
 

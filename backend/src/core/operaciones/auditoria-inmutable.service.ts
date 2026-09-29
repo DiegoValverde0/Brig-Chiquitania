@@ -7,6 +7,7 @@ import { DataSource } from 'typeorm';
  * - incidente.fecha_reporte y asignacion_despacho.timestamp_confirmacion_llegada: write-once
  *   (una vez fijados no cambian), porque de ellos sale el ΔT del KPI.
  * - asignacion_despacho.fecha_asignacion: inmutable (cronómetro del despacho, HU-4.2, Bolt 4).
+ * - bitacora e informe_consolidado: append-only (Bolt 5; UML: "inmutable una vez sincronizada" / "informe inmutable").
  * Idempotente: se aplica en cada arranque mientras se use `synchronize`; con migraciones pasará a una migración.
  */
 @Injectable()
@@ -44,6 +45,26 @@ CREATE TRIGGER evento_auditoria_append_only
 DROP TRIGGER IF EXISTS evento_auditoria_sin_truncate ON evento_auditoria;
 CREATE TRIGGER evento_auditoria_sin_truncate
   BEFORE TRUNCATE ON evento_auditoria
+  FOR EACH STATEMENT EXECUTE FUNCTION rechazar_modificacion_auditoria();
+
+DROP TRIGGER IF EXISTS bitacora_append_only ON bitacora;
+CREATE TRIGGER bitacora_append_only
+  BEFORE UPDATE OR DELETE ON bitacora
+  FOR EACH ROW EXECUTE FUNCTION rechazar_modificacion_auditoria();
+
+DROP TRIGGER IF EXISTS bitacora_sin_truncate ON bitacora;
+CREATE TRIGGER bitacora_sin_truncate
+  BEFORE TRUNCATE ON bitacora
+  FOR EACH STATEMENT EXECUTE FUNCTION rechazar_modificacion_auditoria();
+
+DROP TRIGGER IF EXISTS informe_append_only ON informe_consolidado;
+CREATE TRIGGER informe_append_only
+  BEFORE UPDATE OR DELETE ON informe_consolidado
+  FOR EACH ROW EXECUTE FUNCTION rechazar_modificacion_auditoria();
+
+DROP TRIGGER IF EXISTS informe_sin_truncate ON informe_consolidado;
+CREATE TRIGGER informe_sin_truncate
+  BEFORE TRUNCATE ON informe_consolidado
   FOR EACH STATEMENT EXECUTE FUNCTION rechazar_modificacion_auditoria();
 
 CREATE OR REPLACE FUNCTION proteger_fecha_reporte() RETURNS trigger AS $$

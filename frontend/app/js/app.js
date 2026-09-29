@@ -90,10 +90,11 @@
     evaluacion: { titulo: 'Evaluación de riesgo', modulo: function () { return self.BrcEvaluacion; } },
     cartas: { titulo: 'Cartas municipales', modulo: function () { return self.BrcCartas; } },
     brigada: { titulo: 'Mi brigada', modulo: function () { return self.BrcBrigada; } },
+    informes: { titulo: 'Informes de cierre', modulo: function () { return self.BrcInformes; } },
   };
   var PESTANAS_POR_ROL = {
-    Coordinador: ['reportar', 'panel', 'evaluacion', 'cartas'],
-    ResponsableUGR: ['reportar', 'cartas'],
+    Coordinador: ['reportar', 'panel', 'evaluacion', 'cartas', 'informes'],
+    ResponsableUGR: ['reportar', 'cartas', 'informes'],
     JefeBrigada: ['reportar', 'brigada'],
   };
   var pestanaActual = null;
@@ -511,6 +512,8 @@
     });
     BrcCartas.iniciar();
     BrcBrigada.iniciar();
+    BrcBitacora.iniciar();
+    BrcInformes.iniciar();
     Object.keys(PESTANAS).forEach(function (n) {
       $('tab-' + n).addEventListener('click', function () {
         elegirPestana(n);

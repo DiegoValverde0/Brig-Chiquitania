@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Recorre el flujo del Walking Skeleton (DoD del Bolt 0) contra una API en marcha con la semilla aplicada.
+# Recorre el flujo del Walking Skeleton (DoD del Bolt 0) hasta la bitácora y el cierre (Bolt 5) contra una API en marcha con la semilla aplicada.
 # Uso: API=http://localhost:3000/api sh scripts/flujo-e2e.sh   (requiere curl y node)
 # Tokens: por defecto los usuarios demo de la semilla (solo desarrollo); en otro entorno, exportar
 # TOKEN_GUARDAPARQUE, TOKEN_COORDINADOR y TOKEN_JEFE con tokens reales.
@@ -37,3 +37,10 @@ post "$J" "/asignaciones/$ASIG/llegada" '{"latitud":-16.1150,"longitud":-62.0255
   | campo '"ΔT = "+r.deltaMinutos+" min, ahorro "+r.ahorroPct+" % vs. "+r.lineaBaseMinutos+" min"'
 echo "7) Historial inmutable"
 get "$C" "/incidentes/$ID/historial" | campo 'r.map(h=>h.estadoNuevo).join(" → ")'
+echo "8) Bitácora de turno (checklist, Bolt 5)"
+BIT="$(node -e 'console.log(crypto.randomUUID())')"
+post "$J" "/incidentes/$ID/bitacoras" "{\"id\":\"$BIT\",\"nivelAgua\":\"Suficiente\",\"nivelCombustible\":\"Reserva\",\"herramientasOperativas\":true,\"kmFajaMitigados\":1.5,\"porcentajeControl\":60}" \
+  | campo '"control "+r.porcentajeControl+" %, combustible "+r.nivelCombustible'
+echo "9) Cierre en 1 clic con informe PDF inmutable"
+post "$C" "/incidentes/$ID/cierre" '{"resultado":"Controlado"}' | campo 'r.resultado+" · ΔT "+r.tiempoTotalDespacho+" min · SHA-256 "+r.sha256.slice(0,16)+"…"'
+curl -sf "$API/incidentes/$ID/informe/pdf" -H "Authorization: Bearer $C" | head -c 8; echo " (informe descargado)"

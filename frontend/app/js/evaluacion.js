@@ -168,6 +168,7 @@
 
     pintarCarta();
     pintarReactivacion();
+    pintarCierre();
 
     var historial = $('detalle-historial');
     historial.innerHTML = '';
@@ -298,6 +299,116 @@
     );
   }
 
+  // ---------- cierre e informe consolidado (Bolt 5, HU-5.4, CU-17) ----------
+
+  var ESTADOS_TRAS_LLEGADA = ['En_Atencion', 'En_Liquidacion'];
+  var urlInforme = null;
+
+  function resultadoElegido() {
+    var r = document.querySelector('input[name="resultado-cierre"]:checked');
+    return r ? r.value : null;
+  }
+
+  function pintarCierre() {
+    var cerrado = actual.estado === 'Cerrado';
+    $('detalle-cierre').hidden = cerrado;
+    $('detalle-informe').hidden = !cerrado;
+    texto($('mensaje-cierre'), '');
+    liberarInforme();
+    if (cerrado) return cargarInforme();
+    // Decisión 7.2 del PO: Controlado/Extendido solo después de la llegada; Falso positivo desde cualquier estado.
+    var tras = ESTADOS_TRAS_LLEGADA.indexOf(actual.estado) >= 0;
+    Array.prototype.forEach.call(document.querySelectorAll('input[name="resultado-cierre"]'), function (r) {
+      r.checked = false;
+      r.disabled = r.value !== 'Falso_Positivo' && !tras;
+    });
+    $('justificacion-cierre').value = '';
+    validarCierre();
+    texto($('cierre-resumen'), 'Cargando bitácoras…');
+    BrcApi.get('/incidentes/' + actual.id + '/bitacoras').then(
+      function (res) {
+        var lista = res.datos;
+        if (!lista.length) return texto($('cierre-resumen'), 'Sin bitácoras de turno.' + (tras ? '' : ' Sin llegada: solo se puede cerrar como Falso positivo.'));
+        var u = lista[lista.length - 1];
+        texto(
+          $('cierre-resumen'),
+          lista.length + ' bitácora(s) · última: ' + u.porcentajeControl + ' % de control, ' + u.kmFajaMitigados + ' km de faja, ' + hora(u.fecha),
+        );
+      },
+      function () {
+        texto($('cierre-resumen'), '');
+      },
+    );
+  }
+
+  function validarCierre() {
+    var resultado = resultadoElegido();
+    var largo = $('justificacion-cierre').value.trim().length;
+    var obligatoria = resultado === 'Falso_Positivo';
+    texto($('cierre-obligatoria'), obligatoria ? '(obligatoria, mínimo 15 caracteres)' : '(opcional)');
+    var contador = $('contador-cierre');
+    contador.hidden = !obligatoria;
+    contador.textContent = largo + '/' + MINIMO + ' car.';
+    contador.className = 'contador ' + (largo >= MINIMO ? 'ok' : 'falta');
+    $('cerrar-incidente').disabled = !(resultado && (!obligatoria || largo >= MINIMO) && largo <= 500);
+  }
+
+  function cerrarIncidente() {
+    var resultado = resultadoElegido();
+    var etiqueta = { Controlado: 'CONTROLADO', Extendido: 'EXTENDIDO', Falso_Positivo: 'FALSO POSITIVO' }[resultado];
+    if (!confirm('¿Cerrar FOCO-' + actual.id.slice(0, 8) + ' como ' + etiqueta + '? Se genera el informe consolidado y ya no se puede modificar.')) return;
+    $('cerrar-incidente').disabled = true;
+    texto($('mensaje-cierre'), 'Cerrando y generando el informe…');
+    var cuerpo = { resultado: resultado };
+    var justificacion = $('justificacion-cierre').value.trim();
+    if (justificacion) cuerpo.justificacion = justificacion;
+    BrcApi.post('/incidentes/' + actual.id + '/cierre', cuerpo).then(
+      function () {
+        return abrir(actual.id).then(descargarInforme);
+      },
+      function (e) {
+        validarCierre();
+        texto($('mensaje-cierre'), 'No se cerró: ' + e.message);
+      },
+    );
+  }
+
+  function cargarInforme() {
+    return BrcApi.get('/incidentes/' + actual.id + '/informe').then(
+      function (res) {
+        var i = res.datos;
+        var resultado = { Controlado: 'Controlado', Extendido: 'Extendido', Falso_Positivo: 'Falso positivo' }[i.resultado];
+        texto(
+          $('informe-resumen'),
+          '✔ Cerrado: ' + resultado + ' · ' + hora(i.fechaGeneracion) +
+            (i.tiempoTotalDespacho !== null ? ' · ΔT ' + i.tiempoTotalDespacho + ' min' : '') + ' · ' + i.pesoKB + ' KB',
+        );
+        texto($('informe-sha'), i.sha256);
+      },
+      function (e) {
+        texto($('informe-resumen'), e.message);
+      },
+    );
+  }
+
+  function liberarInforme() {
+    if (urlInforme) URL.revokeObjectURL(urlInforme);
+    urlInforme = null;
+    $('enlace-informe').hidden = true;
+  }
+
+  /** Descarga el PDF (la API exige el token, por eso se baja como Blob y se ofrece como archivo). */
+  function descargarInforme() {
+    return global.BrcInformes.descargar(actual.id).then(function (url) {
+      liberarInforme();
+      urlInforme = url;
+      var enlace = $('enlace-informe');
+      enlace.href = url;
+      enlace.setAttribute('download', 'informe-FOCO-' + actual.id.slice(0, 8) + '.pdf');
+      enlace.hidden = false;
+    });
+  }
+
   // ---------- reactivación (Bolt 4, decisión 7.2) ----------
 
   function pintarReactivacion() {
@@ -391,6 +502,12 @@
     });
     $('motivo-rechazo').addEventListener('input', validarMotivo);
     $('justificacion-reactivar').addEventListener('input', validarReactivacion);
+    $('justificacion-cierre').addEventListener('input', validarCierre);
+    Array.prototype.forEach.call(document.querySelectorAll('input[name="resultado-cierre"]'), function (r) {
+      r.addEventListener('change', validarCierre);
+    });
+    $('cerrar-incidente').addEventListener('click', cerrarIncidente);
+    $('descargar-informe').addEventListener('click', descargarInforme);
     $('reactivar-foco').addEventListener('click', reactivar);
   }
 

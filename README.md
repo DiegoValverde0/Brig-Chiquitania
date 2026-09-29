@@ -73,6 +73,14 @@ historial append-only (`sh backend/scripts/flujo-e2e.sh` lo recorre con curl).
   despacha en 1 clic. Sin jefe con teléfono no se despacha.
 - "Mi brigada": orden de salida con cronómetro, botón para llamar al referente y confirmación de llegada por GPS.
 
+**Bolt 5 — Bitácora y cierre institucional:**
+- Bitácora de turno por checklist (agua, combustible, herramientas, km de faja, % de control; nunca texto libre):
+  se guarda primero en el teléfono y se sincroniza sola en <1 KB, sin duplicarse; también por SMS (`BRC1 B`).
+  Inmutable una vez guardada.
+- Cierre en 1 clic (Controlado / Extendido / Falso positivo con justificación obligatoria): el foco pasa a Cerrado,
+  la brigada queda Disponible y se genera el **Informe Técnico Consolidado** en PDF inmutable (generador propio, sin
+  librerías) con el ciclo completo, el ΔT y todas las bitácoras. Lista de informes con el resumen del KPI.
+
 ## API
 
 Todas las rutas exigen `Authorization: Bearer <token>` salvo `/api/health` y el webhook SMS.
@@ -114,9 +122,16 @@ Todas las rutas exigen `Authorization: Bearer <token>` salvo `/api/health` y el 
 | `POST` | `/api/asignaciones/:id/llegada` | Jefe de Brigada, Coordinador | Confirmación de llegada (write-once) |
 | `GET` | `/api/incidentes/:id/tiempo-despacho` | Coordinador | ΔT, % de ahorro y cumplimiento de la meta del 30 % |
 | `GET` | `/api/incidentes/:id/historial` | Coordinador | Historial append-only: quién, cuándo y motivo |
+| `POST` | `/api/incidentes/:id/bitacoras` | Jefe de Brigada (de la brigada asignada) | Bitácora de turno por checklist, idempotente por `id` (201 / 200); entre la llegada y el cierre |
+| `GET` | `/api/incidentes/:id/bitacoras` | Coordinador, Jefe de Brigada | Bitácoras del foco en orden |
+| `POST` | `/api/incidentes/:id/cierre` | Coordinador | Cierre `{resultado: Controlado \| Extendido \| Falso_Positivo, justificacion}` (≥15 en Falso positivo); genera el informe |
+| `GET` | `/api/incidentes/:id/informe` | Coordinador, UGR | Metadatos del informe (resultado, ΔT, SHA-256) |
+| `GET` | `/api/incidentes/:id/informe/pdf` | Coordinador, UGR | Informe consolidado en PDF (descifrado; cabecera `X-Informe-SHA256`) |
+| `GET` | `/api/informes` | Coordinador, UGR | Focos cerrados con su informe y el resumen del KPI (ΔT promedio, % que cumple la meta) |
 
 Formato SMS (`BRC1`, texto plano ≤160 caracteres):
-`BRC1 G <id> <lat> <lon> <precisión m> <hora>` o `BRC1 D <id> <comunidad> <N|S|E|O> <km> <hora>`
+`BRC1 G <id> <lat> <lon> <precisión m> <hora>`, `BRC1 D <id> <comunidad> <N|S|E|O> <km> <hora>` o, para la
+bitácora de turno, `BRC1 B <foco> <id> <agua S|C> <combustible O|R> <herramientas 1|0> <km> <% control> <hora>`
 (ids en base64url de 22 caracteres, hora en segundos Unix base 36). Detalle en
 `backend/src/core/sync/sms/codec-sms.ts`.
 
@@ -125,6 +140,6 @@ Formato SMS (`BRC1`, texto plano ≤160 caracteres):
 - `backend/`: `npm test` (unitarias) y `npm run test:e2e` (requiere PostgreSQL; crea y vacía la BD `chiquitania_test`).
 - `frontend/pruebas/`: `npm ci && APP=http://localhost:8080 npm test` recorre la app en Chromium (sin conexión,
   cola, SMS simulado, evaluación de riesgo, panel COED con 60 focos, cartas y estados de brigada, despacho en
-  1 clic, orden de salida, reactivación y reasignación, memoria).
+  1 clic, orden de salida, reactivación y reasignación, bitácora sin conexión, cierre con informe PDF, memoria).
   Requiere Chromium (`CHROMIUM=/ruta/al/binario`) y una BD recién sembrada (`npm run seed` deja las brigadas
   Disponibles).

@@ -4,6 +4,7 @@
  *
  *   GPS:       BRC1 G <id> <lat> <lon> <precisión m> <hora>
  *   Distancia: BRC1 D <id> <comunidad> <rumbo N|S|E|O> <km> <hora>
+ *   Bitácora:  BRC1 B <foco> <id> <agua S|C> <combustible O|R> <herramientas 1|0> <km faja> <% control> <hora>
  */
 (function (global) {
   'use strict';
@@ -38,13 +39,30 @@
   /**
    * r: { tipo: 'G', id, latitud, longitud, precisionMetros, fecha }
    *  | { tipo: 'D', id, comunidadId, rumbo, distanciaKm, fecha }
+   *  | { tipo: 'B', incidenteId, id, aguaSuficiente, combustibleOk, herramientasOperativas, kmFajaMitigados,
+   *      porcentajeControl, fecha }   (Bolt 5: bitácora de turno)
    */
   function codificarReporte(r) {
     var hora = Math.floor(r.fecha.getTime() / 1000).toString(36);
-    var partes =
-      r.tipo === 'G'
-        ? [PREFIJO, 'G', uuidACorto(r.id), numero(r.latitud, 5), numero(r.longitud, 5), String(Math.round(r.precisionMetros)), hora]
-        : [PREFIJO, 'D', uuidACorto(r.id), uuidACorto(r.comunidadId), r.rumbo, numero(r.distanciaKm, 1), hora];
+    var partes;
+    if (r.tipo === 'G') {
+      partes = [PREFIJO, 'G', uuidACorto(r.id), numero(r.latitud, 5), numero(r.longitud, 5), String(Math.round(r.precisionMetros)), hora];
+    } else if (r.tipo === 'D') {
+      partes = [PREFIJO, 'D', uuidACorto(r.id), uuidACorto(r.comunidadId), r.rumbo, numero(r.distanciaKm, 1), hora];
+    } else {
+      partes = [
+        PREFIJO,
+        'B',
+        uuidACorto(r.incidenteId),
+        uuidACorto(r.id),
+        r.aguaSuficiente ? 'S' : 'C',
+        r.combustibleOk ? 'O' : 'R',
+        r.herramientasOperativas ? '1' : '0',
+        numero(r.kmFajaMitigados, 1),
+        String(Math.round(r.porcentajeControl)),
+        hora,
+      ];
+    }
     var texto = partes.join(' ');
     if (texto.length > LARGO_MAXIMO) throw new Error('El SMS supera los 160 caracteres');
     return texto;

@@ -12,11 +12,13 @@
  * reporte "En Liquidación" del jefe de brigada; capturas a 1366 px y 360 px.
  * Bolt 4: despacho en 1 clic desde el panel (doble clic → una sola asignación), aviso al jefe (SMS simulado),
  * orden de salida en "Mi brigada" (leída) con llegada por GPS, y reactivación → reasignación táctica en 1 clic.
+ * Bolt 5: bitácora de turno sin conexión (cola, sobrevive a recargar, se sincroniza sola) y cierre en 1 clic con
+ * descarga del informe consolidado en PDF; lista de informes con el KPI.
  */
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { deflateSync, crc32 } from 'node:zlib';
 import { chromium } from 'playwright-core';
 
@@ -137,7 +139,8 @@ async function despachar(foco, brigada, llegar) {
 }
 
 async function entrarComo(navegador, token, viewport, extra = {}) {
-  const ctx = await navegador.newContext({ viewport, deviceScaleFactor: 1, locale: 'es-BO', ...extra });
+  // Movimiento reducido: sin transiciones, las capturas no quedan a mitad de una animación.
+  const ctx = await navegador.newContext({ viewport, deviceScaleFactor: 1, locale: 'es-BO', reducedMotion: 'reduce', ...extra });
   const p = await ctx.newPage();
   p.on('pageerror', (e) => console.log(`    [error de la página] ${e.message}`));
   p.on('dialog', (d) => d.accept());
@@ -359,7 +362,7 @@ async function main() {
     await paso('CU-08: la UGR adjunta la foto de la carta (comprimida a ≤1 MB) y queda "por validar"', async () => {
       focoUgr = await focoSimulado(0, 3, false);
       const { ctx, p } = await entrarComo(navegador, 'demo-ugr', { width: 360, height: 740 });
-      assert.deepEqual(await pestanasVisibles(p), ['Reportar', 'Cartas']);
+      assert.deepEqual(await pestanasVisibles(p), ['Reportar', 'Cartas', 'Informes']);
       assert.equal(await p.getAttribute('#tab-cartas', 'aria-selected'), 'true', 'la UGR entra directo a las cartas');
       await p.click('#tab-cartas');
       const item = p.locator(`#lista-cartas li[data-id="${focoUgr.id}"]`);
@@ -381,7 +384,7 @@ async function main() {
 
     await paso('HU-3.1 / RNF-05: panel COED a 1366 px con 60+ focos, 4 columnas, contadores y 4 estados de brigada', async () => {
       const { ctx, p } = await entrarComo(navegador, 'demo-coordinador', { width: 1366, height: 900 });
-      assert.deepEqual(await pestanasVisibles(p), ['Reportar', 'Panel', 'Riesgo', 'Cartas']);
+      assert.deepEqual(await pestanasVisibles(p), ['Reportar', 'Panel', 'Riesgo', 'Cartas', 'Informes']);
       assert.equal(await p.getAttribute('#tab-panel', 'aria-selected'), 'true', 'el coordinador entra directo al panel');
       await p.click('#tab-panel');
       await p.locator('#kanban .tarjeta-foco').first().waitFor();
@@ -585,6 +588,87 @@ async function main() {
       assert.equal(historial.at(-2).tipoEvento, 'Reactivacion');
       assert.match(historial.at(-1).justificacion, /Reasignación táctica confirmada por el coordinador/);
       await p.screenshot({ path: `${CAPTURAS}15-reasignado.png`, fullPage: false });
+      await ctx.close();
+    });
+
+    // ---------------- Bolt 5: bitácora de turno y cierre institucional ----------------
+    let enCampo;
+    await paso('HU-5.2: el jefe llena la bitácora SIN conexión; queda en cola, sobrevive a recargar y se envía sola', async () => {
+      // Foco en atención: despacho y llegada por API con una brigada Disponible y su jefe.
+      enCampo = await focoSimulado(6, 2, true); // Roboré, 2 km: Alto, con carta
+      const libre = (await api('/brigadas')).datos.find((b) => b.estadoOperativo === 'Disponible');
+      assert.ok(libre, 'hay una brigada Disponible');
+      enCampo.brigada = libre;
+      const d = await llamar('POST', `/incidentes/${enCampo.id}/asignaciones`, 'demo-coordinador', { brigadaId: libre.id });
+      assert.equal(d.estado, 201);
+      const l = await llamar('POST', `/asignaciones/${d.datos.asignacion.id}/llegada`, JEFE_DE[libre.id], {
+        latitud: enCampo.comunidad.latitud,
+        longitud: enCampo.comunidad.longitud,
+        precisionMetros: 10,
+      });
+      assert.equal(l.estado, 201);
+
+      const { ctx, p } = await entrarComo(navegador, JEFE_DE[libre.id], { width: 360, height: 740 });
+      await p.locator('#bitacora-turno').waitFor(); // el jefe entra directo a "Mi brigada"
+      await p.evaluate(() => navigator.serviceWorker.ready);
+      await ctx.setOffline(true);
+      await p.click('label:has(> input[name="agua"][value="Critica"])');
+      for (let i = 0; i < 3; i++) await p.click('button.paso[data-campo="control"][data-paso="10"]');
+      for (let i = 0; i < 2; i++) await p.click('button.paso[data-campo="km"][data-paso="0.5"]');
+      assert.equal(await p.textContent('#valor-control'), '30 %');
+      assert.equal(await p.textContent('#valor-km'), '1 km');
+      await p.click('#guardar-bitacora');
+      const item = p.locator('#lista-bitacoras li.bitacora-item').first();
+      await item.locator('.estado', { hasText: 'En cola' }).waitFor();
+      const sms = (await item.locator('.texto-sms').textContent()).split('  (')[0];
+      assert.match(sms, /^BRC1 B [\w-]{22} [\w-]{22} C O 1 1 30 [0-9a-z]+$/);
+      await p.screenshot({ path: `${CAPTURAS}16-bitacora-sin-datos.png`, fullPage: true });
+      // RNF-01: la app abre sin red, con la orden y la bitácora guardadas en el teléfono.
+      await p.reload();
+      await p.locator('#mensaje-brigada', { hasText: 'Sin conexión' }).waitFor();
+      await p.locator('#lista-bitacoras li.bitacora-item .estado', { hasText: 'En cola' }).waitFor();
+      assert.equal((await api(`/incidentes/${enCampo.id}/bitacoras`)).datos.length, 0, 'todavía no llegó al servidor');
+      await ctx.setOffline(false);
+      await p.locator('#lista-bitacoras li.bitacora-item .estado', { hasText: 'Enviada' }).waitFor({ timeout: 15000 });
+      const remotas = (await api(`/incidentes/${enCampo.id}/bitacoras`)).datos;
+      assert.equal(remotas.length, 1);
+      assert.equal(remotas[0].nivelAgua, 'Critica');
+      assert.equal(remotas[0].porcentajeControl, 30);
+      await ctx.close();
+    });
+
+    await paso('HU-5.4: el coordinador cierra en 1 clic y descarga el informe consolidado en PDF', async () => {
+      const { ctx, p } = await entrarComo(navegador, 'demo-coordinador', { width: 1366, height: 900 }, { acceptDownloads: true });
+      await p.locator('#kanban .tarjeta-foco').first().waitFor(); // entra directo al panel
+      const t = p.locator(`#kanban .columna[data-columna="En_Atencion"] .tarjeta-foco[data-id="${enCampo.id}"]`);
+      await t.locator('.control', { hasText: '30 % control' }).waitFor();
+      await t.locator('.foco-boton').click();
+      await p.locator('#detalle-cierre').waitFor();
+      await p.locator('#cierre-resumen', { hasText: '1 bitácora(s)' }).waitFor();
+      // FE-1: Falso positivo exige 15 caracteres.
+      await p.click('label:has(> input[name="resultado-cierre"][value="Falso_Positivo"])');
+      await p.fill('#justificacion-cierre', 'Quema agrícola');
+      assert.ok(await p.locator('#cerrar-incidente').isDisabled(), 'bloqueado con 14 caracteres');
+      await p.fill('#justificacion-cierre', '');
+      await p.click('label:has(> input[name="resultado-cierre"][value="Controlado"])');
+      assert.ok(await p.locator('#cerrar-incidente').isEnabled());
+      await p.screenshot({ path: `${CAPTURAS}17-cierre.png`, fullPage: false });
+      const [descarga] = await Promise.all([p.waitForEvent('download'), p.click('#cerrar-incidente')]);
+      assert.equal(descarga.suggestedFilename(), `informe-FOCO-${enCampo.id.slice(0, 8)}.pdf`);
+      const pdf = readFileSync(await descarga.path()).toString('latin1');
+      assert.ok(pdf.startsWith('%PDF-1.4'), 'es un PDF');
+      for (const texto of ['Informe Técnico Consolidado de Incidente', 'Resultado: Controlado', '6. Bitácoras de turno', 'Crítica']) {
+        assert.ok(pdf.includes(texto), `el PDF contiene "${texto}"`);
+      }
+      await p.locator('#detalle-informe').waitFor();
+      assert.match(await p.textContent('#informe-sha'), /^[0-9a-f]{64}$/);
+      await p.screenshot({ path: `${CAPTURAS}18-informe.png`, fullPage: false });
+      await p.click('#tab-informes');
+      const item = p.locator(`#lista-informes li[data-id="${enCampo.id}"]`);
+      await item.waitFor();
+      assert.match(await item.textContent(), /Controlado/);
+      assert.match(await p.textContent('#kpi-informes'), /focos? cerrados? · \d+ falsos? positivos? · ΔT promedio/);
+      await p.screenshot({ path: `${CAPTURAS}19-informes.png`, fullPage: false });
       await ctx.close();
     });
 

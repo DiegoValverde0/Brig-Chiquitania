@@ -4,7 +4,8 @@
  * - orden de salida: coordenadas, ruta en línea recta, contacto comunal, cronómetro desde la asignación;
  *   al mostrarla se envía el acuse de recibo (evita el SMS de respaldo a los 3 minutos);
  * - CONFIRMAR LLEGADA con el GPS del teléfono (HU-5.1);
- * - suscripción Web Push para recibir la próxima orden (sin push, llega por SMS).
+ * - suscripción Web Push para recibir la próxima orden (sin push, llega por SMS);
+ * - bitácora de turno por checklist, offline-first (Bolt 5, js/bitacora.js).
  * La liberación (Disponible) la hace el coordinador desde el panel COED.
  */
 (function (global) {
@@ -202,21 +203,42 @@
 
   // ---------- carga ----------
 
+  /**
+   * Carga la brigada y su orden. Sin conexión se usa la última copia guardada en el teléfono (Bolt 5): el jefe
+   * sigue viendo la orden y puede llenar la bitácora en campo, que se envía al volver la señal.
+   */
   function cargar() {
     $('mensaje-brigada').textContent = '';
     return BrcApi.get('/brigadas/mia').then(
       function (res) {
         actual = res.datos;
+        BrcAlmacen.escribir('miBrigada', { datos: res.datos, guardadoEn: new Date().toISOString() });
         pintar();
+        return BrcBitacora.pintar(actual.orden);
       },
       function (e) {
-        actual = null;
-        $('reportar-liquidacion').hidden = true;
-        pintarOrden(null);
-        $('mi-brigada').innerHTML = '';
-        linea($('mi-brigada'), e.estado === 0 ? 'Sin conexión: el estado de la brigada necesita red.' : e.message, 'error');
+        if (e.estado === 0) {
+          return BrcAlmacen.leer('miBrigada').then(function (copia) {
+            if (!copia) return sinBrigada('Sin conexión: el estado de la brigada necesita red.');
+            actual = copia.datos;
+            pintar();
+            $('mensaje-brigada').textContent =
+              '⚠ Sin conexión: datos guardados a las ' + new Date(copia.guardadoEn).toLocaleTimeString() + '.';
+            return BrcBitacora.pintar(actual.orden);
+          });
+        }
+        return sinBrigada(e.message);
       },
     );
+  }
+
+  function sinBrigada(motivo) {
+    actual = null;
+    $('reportar-liquidacion').hidden = true;
+    pintarOrden(null);
+    BrcBitacora.pintar(null);
+    $('mi-brigada').innerHTML = '';
+    linea($('mi-brigada'), motivo, 'error');
   }
 
   function mostrar() {

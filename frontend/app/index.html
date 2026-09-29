@@ -50,6 +50,9 @@
       <button type="button" role="tab" id="tab-brigada" aria-selected="false" aria-controls="panel-brigada" hidden>
         <span class="icono">🚒</span><span class="texto">Brigada</span>
       </button>
+      <button type="button" role="tab" id="tab-informes" aria-selected="false" aria-controls="panel-informes" hidden>
+        <span class="icono">📑</span><span class="texto">Informes</span>
+      </button>
     </nav>
 
     <!-- HU-3.1 / RF-07 / RF-08 (Figura 9): Kanban del COED, solo coordinador -->
@@ -98,6 +101,17 @@
       </div>
     </section>
 
+    <!-- HU-5.4: focos cerrados con su informe consolidado (Coordinador y UGR municipal, Ley 602) -->
+    <section id="panel-informes" role="tabpanel" hidden>
+      <div class="barra-acciones">
+        <h2>Informes de cierre</h2>
+        <button type="button" id="actualizar-informes" class="enlace">↻ Actualizar</button>
+      </div>
+      <p id="kpi-informes" class="tarjeta kpi"></p>
+      <p id="error-informes" class="error" role="alert"></p>
+      <ul id="lista-informes" class="lista"></ul>
+    </section>
+
     <!-- CU-08 (Ley 602): la UGR adjunta la carta; el coordinador, como contingencia -->
     <section id="panel-cartas" role="tabpanel" hidden>
       <div class="barra-acciones">
@@ -130,6 +144,45 @@
         <p class="nota">Asignada hace <strong id="orden-cronometro">—</strong> · <span id="orden-aviso"></span></p>
         <button type="button" id="confirmar-llegada" class="boton boton-principal">📍 CONFIRMAR LLEGADA (GPS)</button>
         <p id="mensaje-llegada" class="nota" role="status"></p>
+      </article>
+      <!-- HU-5.2 / RF-12: bitácora de turno por checklist, offline-first (nunca texto libre) -->
+      <article id="bitacora-turno" class="tarjeta bitacora" hidden>
+        <h2>Bitácora de turno</h2>
+        <p class="nota">Toque lo que cambió desde la última bitácora y guarde. Se guarda en el teléfono y se envía sola.</p>
+        <form id="form-bitacora" novalidate>
+          <fieldset class="checklist">
+            <legend>💧 Agua</legend>
+            <label class="opcion-segmentada"><input type="radio" name="agua" value="Suficiente"><span>Suficiente</span></label>
+            <label class="opcion-segmentada critico"><input type="radio" name="agua" value="Critica"><span>Crítica</span></label>
+          </fieldset>
+          <fieldset class="checklist">
+            <legend>⛽ Combustible</legend>
+            <label class="opcion-segmentada"><input type="radio" name="combustible" value="OK"><span>OK</span></label>
+            <label class="opcion-segmentada critico"><input type="radio" name="combustible" value="Reserva"><span>Reserva</span></label>
+          </fieldset>
+          <fieldset class="checklist">
+            <legend>🧰 Herramientas</legend>
+            <label class="opcion-segmentada"><input type="radio" name="herramientas" value="si"><span>Operativas</span></label>
+            <label class="opcion-segmentada critico"><input type="radio" name="herramientas" value="no"><span>Con fallas</span></label>
+          </fieldset>
+          <div class="contador-bitacora">
+            <span class="etiqueta">🔥 Faja (km)</span>
+            <button type="button" class="boton paso" data-campo="km" data-paso="-0.5" aria-label="Menos medio kilómetro">−</button>
+            <output id="valor-km">0 km</output>
+            <button type="button" class="boton paso" data-campo="km" data-paso="0.5" aria-label="Más medio kilómetro">+</button>
+          </div>
+          <div class="contador-bitacora">
+            <span class="etiqueta">📈 Control</span>
+            <button type="button" class="boton paso" data-campo="control" data-paso="-10" aria-label="Menos 10 por ciento">−</button>
+            <output id="valor-control">0 %</output>
+            <button type="button" class="boton paso" data-campo="control" data-paso="10" aria-label="Más 10 por ciento">+</button>
+          </div>
+          <input id="rango-control" type="range" min="0" max="100" step="5" value="0" aria-label="Porcentaje de control">
+          <button type="submit" id="guardar-bitacora" class="boton boton-principal">GUARDAR BITÁCORA</button>
+          <p id="mensaje-bitacora" class="nota" role="status"></p>
+        </form>
+        <h3>Bitácoras del turno</h3>
+        <ul id="lista-bitacoras" class="lista"></ul>
       </article>
       <p id="estado-push" class="nota"></p>
       <button type="button" id="reportar-liquidacion" class="boton boton-principal" hidden>
@@ -198,6 +251,30 @@
           <p id="mensaje-reactivar" class="nota" role="status"></p>
         </section>
         <p id="detalle-reactivado" class="aviso" hidden></p>
+
+        <!-- HU-5.4 / CU-17: cierre en 1 clic con informe consolidado PDF inmutable -->
+        <section id="detalle-cierre" class="carta cierre" hidden>
+          <h3>Cerrar incidente</h3>
+          <p id="cierre-resumen" class="nota"></p>
+          <fieldset class="niveles modos" id="resultado-cierre">
+            <legend class="oculto">Resultado del cierre</legend>
+            <label class="opcion-segmentada"><input type="radio" name="resultado-cierre" value="Controlado"><span>Controlado</span></label>
+            <label class="opcion-segmentada"><input type="radio" name="resultado-cierre" value="Extendido"><span>Extendido</span></label>
+            <label class="opcion-segmentada riesgo-selector-alto"><input type="radio" name="resultado-cierre" value="Falso_Positivo"><span>Falso positivo</span></label>
+          </fieldset>
+          <label for="justificacion-cierre">Justificación <span id="cierre-obligatoria">(opcional)</span>
+            <span id="contador-cierre" class="contador">0/15 car.</span></label>
+          <textarea id="justificacion-cierre" rows="2" maxlength="500" placeholder="Obligatoria si es Falso positivo: por qué se descarta el foco"></textarea>
+          <button type="button" id="cerrar-incidente" class="boton boton-oscuro" disabled>CERRAR Y GENERAR INFORME</button>
+          <p id="mensaje-cierre" class="nota" role="status"></p>
+        </section>
+        <section id="detalle-informe" class="carta" hidden>
+          <h3>Informe consolidado</h3>
+          <p id="informe-resumen"></p>
+          <button type="button" id="descargar-informe" class="boton">📑 Descargar informe (PDF)</button>
+          <a id="enlace-informe" class="enlace" hidden>Guardar el PDF</a>
+          <p class="nota">SHA-256: <code id="informe-sha"></code></p>
+        </section>
 
         <section id="detalle-carta" class="carta">
           <h3>Carta municipal (Ley 602)</h3>
@@ -323,6 +400,8 @@
   <script src="js/panel.js"></script>
   <script src="js/cartas.js"></script>
   <script src="js/brigada.js"></script>
+  <script src="js/bitacora.js"></script>
+  <script src="js/informes.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
