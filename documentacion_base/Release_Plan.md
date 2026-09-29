@@ -99,5 +99,5 @@
 ## 6. Estado de ejecución
 | Bolt | Estado | Notas |
 |---|---|---|
-| Bolt 0 | 🟡 En revisión del PO | Infraestructura (PR #1), modelo alineado al UML + semilla (PR #3) y flujo E2E con auditoría append-only y pruebas automatizadas (PR B). Se cierra cuando el PO apruebe el PR B. |
+| Bolt 0 | 🟢 Cerrado (29/09/2026) | DoD verificada sobre `main` (`b8833cf`): infraestructura (PR #1), modelo alineado al UML + semilla (PR #3) y flujo E2E con auditoría append-only (PR #4). Evidencia: `npm run build` OK; `npm test` 9/9; `npm run test:e2e` 17/17 (RF-01, RF-04, RF-09, RF-14, RNF-01, RNF-04, RNF-07); recorrido manual por HTTP Nuevo → Alto → panel → sugerencia → carta → Asignado → En atención con ΔT = 90 min (ahorro 50 % vs. 180 min); la BD rechaza UPDATE sobre `historial_estado` y sobre `timestamp_confirmacion_llegada`. |
 | Bolt 1–5, 1.0 | ⚪ No iniciado | — |
