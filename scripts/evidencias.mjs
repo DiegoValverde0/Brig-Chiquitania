@@ -170,6 +170,7 @@ const PASOS = [
       rmSync(capturasOrigen, { recursive: true, force: true });
       const r = await ejecutar(NODE, ['app.prueba.mjs'], { cwd: PRUEBAS_WEB, env: { APP } });
       guardar(this.archivo, `$ semilla\n${s.salida}\n$ node app.prueba.mjs (APP=${APP})\n${r.salida}`);
+      rmSync(join(SALIDA, 'capturas'), { recursive: true, force: true });
       if (existsSync(capturasOrigen)) cpSync(capturasOrigen, join(SALIDA, 'capturas'), { recursive: true });
       const m = r.salida.match(/(\d+)\/(\d+) pasos OK/);
       return { ok: s.codigo === 0 && r.codigo === 0, detalle: `${m ? m[0] : 'sin resumen'} · capturas en capturas/` };
