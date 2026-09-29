@@ -59,6 +59,15 @@ frontend/
   `version` de la brigada (bloqueo optimista). Un 409 recarga el panel.
 - **Web Push:** si el navegador no lo soporta o se niega el permiso, avisar que las órdenes llegarán por SMS (nunca
   bloquear). El push real no se prueba en Chromium headless (necesita FCM); lo cubre el e2e con un push falso.
+- **Diseño visual (refactorización con Gemini, 29/09/2026, revisada por Claude):** cabecera fija roja; en el
+  teléfono (<600 px) las pestañas son una barra inferior con ícono (`.icono`) y texto corto (`.texto`); cada rol entra
+  en su pantalla principal (Coordinador → Panel, UGR → Cartas, Jefe → Brigada, Guardaparque → Reportar). Controles
+  segmentados (`.opcion-segmentada`, `.segmentado-opcion`): el input queda oculto (0×0) y el estado se pinta en el
+  `span` (incluido `:disabled`); en las pruebas se hace clic en la etiqueta, no `check()` sobre el input.
+- **Reglas de estilo:** una sola definición por clase (una regla más abajo pisa a la de arriba); nada de animaciones
+  infinitas en listas o en el mapa (RS-01/RS-02: 60+ focos en un teléfono de 1 GB) y respetar
+  `prefers-reduced-motion`; no usar `?v=` en los recursos (el service worker es red-primero: subir `VERSION`).
+  Un cambio "visual" no debe cambiar reglas de negocio (p. ej. la llegada siempre lleva coordenadas GPS).
 - Estados de brigada con sus símbolos de la leyenda: `*` Disponible, `^` En desplazamiento, `#` En combate,
   `~` En liquidación.
 

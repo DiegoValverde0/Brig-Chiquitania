@@ -360,6 +360,9 @@ npm run start:dev                # API en :3000 y, con FRONTEND_DIR, también la
 | Desde un teléfono en la misma red el GPS no funciona | El navegador solo permite geolocalización en `localhost` o con **HTTPS**. Para pruebas, usar el reporte a distancia o configurar TLS. |
 | Cambios del frontend no se ven | Caché del service worker: *Unregister* y `Ctrl+Shift+R` (3.3). |
 | La prueba del navegador no encuentra Chromium | Definir la variable `CHROMIUM` con la ruta al ejecutable (4.2). |
+| Windows/PowerShell: `sh : El término 'sh' no se reconoce` | Ejecutar los scripts `.sh` desde **Git Bash** (`bash backend/scripts/flujo-e2e.sh`) o WSL. |
+| Windows/PowerShell: `curl` pide "Advertencia de seguridad" | En PowerShell `curl` es `Invoke-WebRequest`: usar `curl.exe http://localhost:3000/api/health` (el `curl` real). |
+| La semilla muestra `DeprecationWarning: Calling client.query() when the client is already executing a query` | Viene de TypeORM al sincronizar el esquema (`DB_SYNCHRONIZE=true`, solo desarrollo); es inofensiva y desaparece con las migraciones (Release 1.0). |
 
 ---
 

@@ -82,6 +82,7 @@
       llamar.hidden = true;
     }
     $('confirmar-llegada').hidden = o.llegadaConfirmada;
+    $('orden-accion').hidden = o.llegadaConfirmada;
     $('orden-aviso').textContent = o.llegadaConfirmada ? 'llegada confirmada' : 'orden recibida';
     var desde = new Date(o.fechaAsignacion).getTime();
     var tic = function () {
@@ -101,65 +102,60 @@
     });
   }
 
+  /**
+   * HU-5.1: llegada con el GPS del teléfono (decisión del PO, 29/09/2026). Con señal débil el jefe puede confirmar
+   * igual y se envían las coordenadas con su precisión real (queda auditada). Sin GPS no se envía nada: la llegada
+   * se avisa por radio y la registra la central (la API exige coordenadas: son la evidencia del ΔT).
+   */
   function confirmarLlegada() {
     var o = actual && actual.orden;
     if (!o) return;
     var mensaje = $('mensaje-llegada');
-    
+    var boton = $('confirmar-llegada');
+    var sinGps = function (motivo) {
+      boton.disabled = false;
+      mensaje.textContent = motivo + ' Avise su llegada por radio: la central la registra.';
+    };
+
     function enviar(pos) {
-      var payload = {};
-      if (pos) {
-        payload.latitud = Math.round(pos.coords.latitude * 1e6) / 1e6;
-        payload.longitud = Math.round(pos.coords.longitude * 1e6) / 1e6;
-        payload.precisionMetros = Math.round(pos.coords.accuracy * 10) / 10;
-      }
       mensaje.textContent = 'Enviando confirmación…';
-      BrcApi.post('/asignaciones/' + o.asignacionId + '/llegada', payload).then(
+      BrcApi.post('/asignaciones/' + o.asignacionId + '/llegada', {
+        latitud: Math.round(pos.coords.latitude * 1e6) / 1e6,
+        longitud: Math.round(pos.coords.longitude * 1e6) / 1e6,
+        precisionMetros: Math.round(pos.coords.accuracy * 10) / 10,
+      }).then(
         function (res) {
-          $('confirmar-llegada').disabled = false;
+          boton.disabled = false;
           mensaje.textContent = '✔ Llegada confirmada. ΔT = ' + res.datos.deltaMinutos + ' min desde el reporte.';
           cargar();
         },
         function (e) {
-          $('confirmar-llegada').disabled = false;
+          boton.disabled = false;
           mensaje.textContent = 'No se confirmó: ' + e.message;
         },
       );
     }
 
-    if (!('geolocation' in navigator)) {
-      if (confirm('Este dispositivo no tiene GPS. ¿Desea confirmar su llegada manualmente?')) {
-        $('confirmar-llegada').disabled = true;
-        enviar(null);
-      }
-      return;
-    }
-    
-    $('confirmar-llegada').disabled = true;
+    if (!('geolocation' in navigator)) return sinGps('Este teléfono no tiene GPS.');
+    boton.disabled = true;
     mensaje.textContent = 'Buscando señal GPS…';
     navigator.geolocation.getCurrentPosition(
       function (pos) {
-        var precision = Math.round(pos.coords.accuracy * 10) / 10;
-        if (precision > PRECISION_LLEGADA_M) {
-          if (confirm('La señal GPS es muy débil (Precisión: ±' + Math.round(precision) + ' m). ¿Confirma que ya llegó al lugar usando estas coordenadas aproximadas?')) {
-            enviar(pos);
-          } else {
-            $('confirmar-llegada').disabled = false;
-            mensaje.textContent = 'Cancelado. Reintente a cielo abierto.';
-          }
+        var precision = Math.round(pos.coords.accuracy);
+        if (
+          precision > PRECISION_LLEGADA_M &&
+          !confirm('La señal GPS es débil (±' + precision + ' m). ¿Confirma que ya llegó al foco con esta ubicación aproximada?')
+        ) {
+          boton.disabled = false;
+          mensaje.textContent = 'Cancelado. Reintente a cielo abierto.';
           return;
         }
         enviar(pos);
       },
-      function (err) {
-        if (confirm('Fallo al obtener ubicación GPS. ¿Desea confirmar su llegada manualmente (sin coordenadas)?')) {
-          enviar(null);
-        } else {
-          $('confirmar-llegada').disabled = false;
-          mensaje.textContent = 'Cancelado por falla de GPS.';
-        }
+      function () {
+        sinGps('No se obtuvo señal GPS.');
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 60000 },
     );
   }
 

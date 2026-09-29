@@ -748,14 +748,6 @@ legend {
   line-height: 1.5;
 }
 
-.cita::before {
-  content: '“';
-  font-size: 1.5rem;
-  color: #9aa0a6;
-  margin-right: 4px;
-  line-height: 0;
-  vertical-align: bottom;
-}
 
 .factores {
   background: #f8f9fa;
@@ -1177,7 +1169,13 @@ textarea {
 
 .riesgo-mapa-Alto circle {
   fill: var(--rojo);
-  animation: latido-foco 1.5s infinite ease-in-out;
+}
+
+/* RS-01/RS-02: el latido solo 3 veces al pintar (no infinito: 60+ focos en un teléfono de 1 GB). */
+@media (prefers-reduced-motion: no-preference) {
+  .riesgo-mapa-Alto circle {
+    animation: latido-foco 1.5s 3 ease-in-out;
+  }
 }
 
 .riesgo-mapa-Medio circle {
@@ -1493,70 +1491,74 @@ textarea {
 .esqueleto * {
   visibility: hidden;
 }
+/* Tamaño del botón de despacho dentro de la tarjeta (los colores son los del bloque "Mejoras Bolt 4"). */
 .boton.despachar {
   width: auto;
   min-height: 40px;
   margin: 0;
   padding: 6px 12px;
   font-size: 0.85rem;
-  background: #111;
-  border-color: #111;
-  color: #fff;
-}
-
-.boton.despachar.reasignar {
-  background: var(--ambar);
-  border-color: var(--ambar);
 }
 
 .boton.despachar:disabled {
   background: #eceff1;
-  border-color: var(--borde);
+  border: 1px solid var(--borde);
   color: var(--suave);
+  box-shadow: none;
 }
 
 .bloqueo {
   font-size: 0.8rem;
 }
 
-.insignia.reactivado {
-  background: #4a148c;
-  color: #fff;
-}
-
-.insignia.posible-reactivacion {
-  background: #f3e5f5;
-  color: #4a148c;
-  border: 1px dashed #8e24aa;
-}
-
-.aviso-Enviada,
-.aviso-Pendiente {
+.insignia.aviso-Pendiente {
   background: #e3f2fd;
   color: #1565c0;
 }
 
-.aviso-Leida {
-  background: #e8f5e9;
-  color: var(--verde);
+/* Controles segmentados: el input está oculto, el estado se ve en el span. Misma especificidad que la regla global
+   de checkbox/radio personalizados (y declarada después), para que el input oculto no ocupe espacio. */
+.segmentado-opcion input[type='checkbox'],
+.segmentado-opcion input[type='radio'],
+.opcion-segmentada input[type='radio'] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  border: 0;
 }
 
-.aviso-Fallida {
-  background: #ffebee;
-  color: var(--rojo-oscuro);
+/* La barra superior es fija (sticky): lo que se enfoca con scrollIntoView no debe quedar debajo de ella. */
+#detalle-foco,
+.orden,
+.tarjeta-foco {
+  scroll-margin-top: 96px;
 }
 
-.orden {
-  border: 2px solid var(--rojo);
+.opcion-segmentada input:disabled + span,
+.segmentado-opcion input:disabled + span {
+  opacity: 0.4;
+  cursor: not-allowed;
+  text-decoration: line-through;
 }
 
-.orden h2 {
-  margin-top: 0;
-  color: var(--rojo-oscuro);
+.opcion-segmentada input:disabled,
+.segmentado-opcion input:disabled {
+  cursor: not-allowed;
 }
 
 #orden-llamar[hidden] {
   display: none;
+}
+
+/* Accesibilidad y batería: sin animaciones si el sistema pide menos movimiento. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 /* Teléfono: columnas apiladas; cada una conserva su propio desplazamiento. */

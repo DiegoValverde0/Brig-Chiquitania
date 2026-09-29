@@ -149,7 +149,7 @@ async function entrarComo(navegador, token, viewport, extra = {}) {
 }
 
 const pestanasVisibles = (p) =>
-  p.$$eval('#pestanas button', (bs) => bs.filter((b) => !b.hidden).map((b) => b.textContent.trim()));
+  p.$$eval('#pestanas button', (bs) => bs.filter((b) => !b.hidden).map((b) => b.querySelector('.texto').textContent.trim()));
 const sinDesbordeHorizontal = (p) =>
   p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 
@@ -228,7 +228,7 @@ async function main() {
     await paso('sin datos: el reporte a distancia queda en cola y muestra el SMS de ≤160 caracteres', async () => {
       await contexto.setOffline(true);
       await pagina.locator('#estado-red', { hasText: 'Sin datos' }).waitFor();
-      await pagina.check('input[name="modo"][value="Distancia"]');
+      await pagina.click('label:has(> input[name="modo"][value="Distancia"])');
       await pagina.selectOption('#comunidad', { label: 'Concepción' });
       await pagina.check('input[name="rumbo"][value="E"]');
       await pagina.fill('#distancia', '4');
@@ -267,7 +267,7 @@ async function main() {
       await pagina.click('.ajustes summary'); // "Ajustes" viene plegado
       await pagina.check('#simular-sin-datos');
       await pagina.locator('#estado-red', { hasText: 'Sin datos' }).waitFor();
-      await pagina.check('input[name="modo"][value="GPS"]');
+      await pagina.click('label:has(> input[name="modo"][value="GPS"])');
       await pagina.click('#capturar-gps');
       await pagina.locator('#lectura-gps', { hasText: '✔' }).waitFor();
       await pagina.click('#enviar');
@@ -310,7 +310,7 @@ async function main() {
       assert.match(await p.textContent('#detalle-distancia'), /Distancia a comunidad: 10 km \(Concepción\)/);
       assert.ok(await p.locator('input[name="nivel"][value="Medio"]').isDisabled(), 'no se puede elegir el nivel vigente');
 
-      await p.check('input[name="nivel"][value="Alto"]');
+      await p.click('label:has(> input[name="nivel"][value="Alto"])');
       await p.fill('#justificacion', 'Humo muy denso');
       assert.equal(await p.textContent('#contador'), '14/15 car.');
       assert.ok(await p.locator('#guardar-reclasificacion').isDisabled(), 'DoD 3: bloqueado con 14 caracteres');
@@ -342,7 +342,8 @@ async function main() {
 
     await paso('RF-08: el jefe de brigada reporta "En Liquidación / Por finalizar" desde su teléfono', async () => {
       const { ctx, p } = await entrarComo(navegador, 'demo-jefe-brigada', { width: 360, height: 740 });
-      assert.deepEqual(await pestanasVisibles(p), ['Reportar', 'Mi brigada']);
+      assert.deepEqual(await pestanasVisibles(p), ['Reportar', 'Brigada']);
+      assert.equal(await p.getAttribute('#tab-brigada', 'aria-selected'), 'true', 'el jefe entra directo a su brigada');
       await p.click('#tab-brigada');
       await p.locator('#estado-mi-brigada', { hasText: 'En combate activo' }).waitFor();
       assert.match(await p.textContent('#mi-brigada'), /Brigada Departamental 3[\s\S]*Foco asignado: FOCO-/);
@@ -359,6 +360,7 @@ async function main() {
       focoUgr = await focoSimulado(0, 3, false);
       const { ctx, p } = await entrarComo(navegador, 'demo-ugr', { width: 360, height: 740 });
       assert.deepEqual(await pestanasVisibles(p), ['Reportar', 'Cartas']);
+      assert.equal(await p.getAttribute('#tab-cartas', 'aria-selected'), 'true', 'la UGR entra directo a las cartas');
       await p.click('#tab-cartas');
       const item = p.locator(`#lista-cartas li[data-id="${focoUgr.id}"]`);
       await item.waitFor();
@@ -379,7 +381,8 @@ async function main() {
 
     await paso('HU-3.1 / RNF-05: panel COED a 1366 px con 60+ focos, 4 columnas, contadores y 4 estados de brigada', async () => {
       const { ctx, p } = await entrarComo(navegador, 'demo-coordinador', { width: 1366, height: 900 });
-      assert.deepEqual(await pestanasVisibles(p), ['Reportar', 'Panel COED', 'Evaluación', 'Cartas']);
+      assert.deepEqual(await pestanasVisibles(p), ['Reportar', 'Panel', 'Riesgo', 'Cartas']);
+      assert.equal(await p.getAttribute('#tab-panel', 'aria-selected'), 'true', 'el coordinador entra directo al panel');
       await p.click('#tab-panel');
       await p.locator('#kanban .tarjeta-foco').first().waitFor();
       const panel = (await api('/panel')).datos;
@@ -410,11 +413,11 @@ async function main() {
       // RF-07: filtros de trámite municipal; las tarjetas y contadores cambian.
       const cartasVisibles = () => p.$$eval('#kanban .tarjeta-foco', (ts) => ts.map((t) => t.dataset.carta));
       const esperarResumen = (visibles) => p.locator('#resumen-panel', { hasText: `Mostrando ${visibles} de` }).waitFor();
-      await p.check('input[name="carta"][value="por_validar"]');
+      await p.click('label:has(> input[name="carta"][value="por_validar"])');
       await esperarResumen((await api('/panel?carta=por_validar')).datos.resumen.visibles);
       assert.ok((await cartasVisibles()).every((c) => c === 'por_validar'));
       assert.equal(await (await tarjetaDelPanel(p, focoUgr.id)).count(), 1);
-      await p.check('input[name="carta"][value="sin"]');
+      await p.click('label:has(> input[name="carta"][value="sin"])');
       const sin = (await api('/panel?carta=sin')).datos;
       await esperarResumen(sin.resumen.visibles);
       assert.ok((await cartasVisibles()).every((c) => c === 'sin_carta' || c === 'rechazada'));
@@ -424,10 +427,10 @@ async function main() {
         `${sin.resumen.columnas.Nuevo.total} · 0 con carta`,
       );
       await p.screenshot({ path: `${CAPTURAS}09-panel-filtro-sin-carta.png`, fullPage: true });
-      await p.check('input[name="carta"][value="con"]');
+      await p.click('label:has(> input[name="carta"][value="con"])');
       await esperarResumen((await api('/panel?carta=con')).datos.resumen.visibles);
       assert.ok((await cartasVisibles()).every((c) => c === 'por_validar' || c === 'validada'));
-      await p.check('input[name="carta"][value=""]');
+      await p.click('label:has(> input[name="carta"][value=""])');
       await esperarResumen((await api('/panel')).datos.resumen.visibles);
 
       // CU-08: el coordinador abre la tarjeta, ve la carta y la valida → [Con carta].
@@ -443,13 +446,13 @@ async function main() {
       await p.locator('#carta-estado', { hasText: 'Con carta' }).waitFor();
       await p.screenshot({ path: `${CAPTURAS}10-carta-validada.png`, fullPage: true });
       await p.click('#tab-panel');
-      await p.check('input[name="carta"][value="con"]');
+      await p.click('label:has(> input[name="carta"][value="con"])');
       await esperarResumen((await api('/panel?carta=con')).datos.resumen.visibles);
       assert.equal(await (await tarjetaDelPanel(p, focoUgr.id)).getAttribute('data-carta'), 'validada');
 
       // Rechazo con motivo (≥15): bloquea el despacho.
       const otro = focos.filter((_, i) => i % 3 === 0)[5];
-      await p.check('input[name="carta"][value=""]');
+      await p.click('label:has(> input[name="carta"][value=""])');
       await esperarResumen((await api('/panel')).datos.resumen.visibles);
       await (await tarjetaDelPanel(p, otro.id)).locator('.foco-boton').click();
       await p.locator('#carta-estado', { hasText: 'Por validar' }).waitFor();
@@ -504,6 +507,18 @@ async function main() {
     });
 
     await paso('HU-4.2: el jefe ve la orden de salida (acuse de recibo) y confirma la llegada con GPS', async () => {
+      // Sin permiso de GPS: no se registra nada y se pide avisar por radio (decisión del PO, 29/09/2026).
+      const sinGps = await entrarComo(navegador, JEFE_DE[despachado.brigada.id], { width: 360, height: 740 });
+      await sinGps.p.evaluate(() => {
+        navigator.geolocation.getCurrentPosition = (_, error) => error({ code: 2, message: 'sin señal' });
+      });
+      await sinGps.p.locator('#orden-salida').waitFor();
+      await sinGps.p.click('#confirmar-llegada');
+      await sinGps.p.locator('#mensaje-llegada', { hasText: 'Avise su llegada por radio' }).waitFor();
+      await sinGps.ctx.close();
+      const antes = (await api(`/incidentes/${despachado.id}/historial`)).datos;
+      assert.ok(!antes.some((h) => h.estadoNuevo === 'En_Atencion'), 'sin GPS no se registra la llegada');
+
       const punto = { latitude: -16.2747 + 2 / 111.195, longitude: -62.5064, accuracy: 10 };
       const { ctx, p } = await entrarComo(navegador, JEFE_DE[despachado.brigada.id], { width: 360, height: 740 }, {
         permissions: ['geolocation'],

@@ -131,13 +131,14 @@
     // Bolt 4: la notificación de despacho abre la app en "Mi brigada" (./?pestana=brigada).
     var pedida = /[?&]pestana=(\w+)/.exec(location.search);
     var visibles = (usuario && PESTANAS_POR_ROL[usuario.rol]) || ['reportar'];
-    var pestañaDefecto = 'reportar';
+    // Cada rol entra en su pantalla principal (el guardaparque, en "Reportar").
+    var pestanaDefecto = 'reportar';
     if (usuario) {
-      if (usuario.rol === 'Coordinador') pestañaDefecto = 'panel';
-      else if (usuario.rol === 'ResponsableUGR') pestañaDefecto = 'cartas';
-      else if (usuario.rol === 'JefeBrigada') pestañaDefecto = 'brigada';
+      if (usuario.rol === 'Coordinador') pestanaDefecto = 'panel';
+      else if (usuario.rol === 'ResponsableUGR') pestanaDefecto = 'cartas';
+      else if (usuario.rol === 'JefeBrigada') pestanaDefecto = 'brigada';
     }
-    elegirPestana(pedida && visibles.indexOf(pedida[1]) >= 0 ? pedida[1] : pestañaDefecto);
+    elegirPestana(pedida && visibles.indexOf(pedida[1]) >= 0 ? pedida[1] : pestanaDefecto);
     mostrar('principal');
     cargarCatalogo();
     BrcSync.actualizarCatalogo();

@@ -4,7 +4,7 @@
  * Subir VERSION al cambiar cualquier archivo de la lista.
  * Bolt 4: recibe el Web Push de la orden de salida (RF-11) y al tocarlo abre "Mi brigada".
  */
-var VERSION = 'brc-app-v4';
+var VERSION = 'brc-app-v5';
 var CASCARA = [
   './',
   'index.html',
