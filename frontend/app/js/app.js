@@ -73,12 +73,28 @@
   function cerrarSesion() {
     BrcAjustes.fijar('token', null);
     BrcAjustes.fijar('usuario', null);
+    $('pestanas').hidden = true;
     mostrar('login');
+  }
+
+  /** Pestañas por rol: solo el Coordinador ve "Evaluación de riesgo" (la API también lo exige: RNF-08). */
+  function elegirPestana(nombre) {
+    var evaluar = nombre === 'evaluacion';
+    $('panel-evaluacion').hidden = !evaluar;
+    $('panel-reportar').hidden = evaluar;
+    $('tab-evaluacion').setAttribute('aria-selected', String(evaluar));
+    $('tab-reportar').setAttribute('aria-selected', String(!evaluar));
+    texto($('titulo'), evaluar ? 'Evaluación de riesgo' : 'Reportar foco de calor');
+    if (evaluar) BrcEvaluacion.mostrar();
+    else detenerGps();
   }
 
   function entrar() {
     var usuario = BrcAjustes.obtener('usuario', null);
     texto($('usuario'), usuario ? usuario.nombre + ' · ' + usuario.rol : '');
+    var esCoordinador = !!usuario && usuario.rol === 'Coordinador';
+    $('pestanas').hidden = !esCoordinador;
+    elegirPestana('reportar');
     mostrar('principal');
     cargarCatalogo();
     BrcSync.actualizarCatalogo();
@@ -443,6 +459,13 @@
   }
 
   function iniciar() {
+    BrcEvaluacion.iniciar();
+    $('tab-reportar').addEventListener('click', function () {
+      elegirPestana('reportar');
+    });
+    $('tab-evaluacion').addEventListener('click', function () {
+      elegirPestana('evaluacion');
+    });
     $('form-login').addEventListener('submit', iniciarSesion);
     $('form-reporte').addEventListener('submit', enviar);
     $('capturar-gps').addEventListener('click', capturarGps);

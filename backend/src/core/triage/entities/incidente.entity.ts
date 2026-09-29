@@ -7,7 +7,9 @@ import { Rumbo } from '../../reporte/enums/rumbo.enum';
 import { TipoReporte } from '../../reporte/enums/tipo-reporte.enum';
 import { NivelRiesgo } from '../enums/nivel-riesgo.enum';
 import { EstadoIncidente } from '../enums/estado-incidente.enum';
+import { OrigenRiesgo } from '../enums/origen-riesgo.enum';
 import { ResultadoCierre } from '../enums/resultado-cierre.enum';
+import type { FactoresRiesgo } from '../motor-riesgo.service';
 import { CartaMunicipal } from './carta-municipal.entity';
 
 @Entity('incidente')
@@ -26,9 +28,20 @@ export class Incidente extends EntidadBase {
   @Column({ name: 'fecha_reporte', type: 'timestamptz', default: () => 'now()' })
   fechaReporte: Date;
 
-  /** Explicación visible del nivel de riesgo (p. ej. "Amenaza directa a vida humana comunitaria"). */
+  /**
+   * Explicación visible del cálculo del motor (p. ej. "Amenaza directa a vida humana comunitaria").
+   * Se conserva aunque el coordinador reclasifique: la justificación manual queda en el historial (HU-2.2).
+   */
   @Column({ name: 'justificacion_riesgo', type: 'text', nullable: true })
   justificacionRiesgo: string | null;
+
+  /** Si el nivel vigente lo fijó el motor o una reclasificación manual (HU-2.2). */
+  @Column({ name: 'origen_riesgo', type: 'enum', enum: OrigenRiesgo, default: OrigenRiesgo.Motor })
+  origenRiesgo: OrigenRiesgo;
+
+  /** RF-05: factores que evaluó el motor (versión, regla, umbrales, comunidad, predios excluidos). */
+  @Column({ name: 'factores_riesgo', type: 'jsonb', nullable: true })
+  factoresRiesgo: FactoresRiesgo | null;
 
   @Column({ name: 'resultado_cierre', type: 'enum', enum: ResultadoCierre, nullable: true })
   resultadoCierre: ResultadoCierre | null;

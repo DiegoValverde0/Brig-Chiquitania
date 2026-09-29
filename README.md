@@ -43,6 +43,14 @@ historial append-only (`sh backend/scripts/flujo-e2e.sh` lo recorre con curl).
 - Seguridad (RNF-08): usuarios con rol y token; cifrado AES-256-GCM en reposo de la ubicación del foco, los
   datos del referente comunal, los SMS y las fotos.
 
+**Bolt 2 — Motor de riesgo y gobernanza algorítmica:**
+- Motor explicable: Alto (<5 km de una comunidad habitada, "Amenaza directa a vida humana comunitaria"), Medio
+  (5–15 km) o Bajo, con los factores evaluados guardados en cada incidente. Las estancias privadas se excluyen
+  explícitamente de la priorización.
+- Reclasificación manual por el coordinador con justificación obligatoria (≥15 caracteres), registrada en el
+  historial append-only con quién, cuándo, motivo y niveles.
+- Pestaña "Evaluación de riesgo" en la app para el coordinador (wireframe de la Figura 8).
+
 ## API
 
 Todas las rutas exigen `Authorization: Bearer <token>` salvo `/api/health` y el webhook SMS.
@@ -63,6 +71,9 @@ Todas las rutas exigen `Authorization: Bearer <token>` salvo `/api/health` y el 
 | `GET` | `/api/sms/configuracion` | cualquiera | Número de la central y pasarela activa |
 | `GET` | `/api/sms/mensajes` | Coordinador | Bandeja de SMS entrantes y salientes |
 | `GET` | `/api/panel` | Coordinador | Incidentes activos por estado y brigadas |
+| `GET` | `/api/incidentes/:id/evaluacion` | Coordinador | Riesgo vigente, origen, justificación y factores del motor, reclasificaciones |
+| `POST` | `/api/incidentes/:id/reclasificacion` | Coordinador | Reclasificación manual `{nivelRiesgo, justificacion}` (≥15 caracteres) |
+| `GET` / `POST` | `/api/predios-privados` | Coordinador | Catálogo de estancias excluidas de la priorización |
 | `POST` | `/api/incidentes/:id/carta-municipal` | UGR, Coordinador | Registro de la carta municipal (0..1) |
 | `GET` | `/api/incidentes/:id/brigadas-sugeridas` | Coordinador | Brigadas Disponibles por cercanía (solo riesgo Alto/Medio) |
 | `POST` | `/api/incidentes/:id/asignaciones` | Coordinador | Despacho confirmado (exige carta y contacto comunal) |

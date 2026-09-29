@@ -93,6 +93,7 @@ async function main() {
       await pagina.locator('#vista-principal').waitFor();
       await pagina.waitForFunction(() => document.getElementById('version-catalogo').textContent === '7 comunidades');
       assert.equal(await pagina.textContent('#estado-red'), 'Con datos');
+      assert.ok(await pagina.locator('#pestanas').isHidden(), 'el guardaparque no ve la pestaña de evaluación');
       // El service worker queda instalado y controlando la página (necesario para abrir sin red).
       await pagina.evaluate(() => navigator.serviceWorker.ready);
       await pagina.reload();
@@ -179,6 +180,52 @@ async function main() {
       assert.deepEqual(mensajes.map((m) => m.direccion).sort(), ['Entrante', 'Saliente']);
       await pagina.screenshot({ path: `${CAPTURAS}03-recibido-por-sms.png`, fullPage: true });
       await pagina.uncheck('#simular-sin-datos');
+    });
+
+    await paso('HU-2.1 / HU-2.2: el coordinador ve la explicación del motor y reclasifica con ≥15 caracteres', async () => {
+      // Foco a ~10 km al norte de Concepción ⇒ Medio, creado por el guardaparque.
+      const id = crypto.randomUUID();
+      const alta = await fetch(`${APP}/api/incidentes`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer demo-guardaparque', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, latitud: -16.1333 + 10 / 111.195, longitud: -62.0258, precisionMetros: 8 }),
+      });
+      assert.equal(alta.status, 201);
+
+      const ctx = await navegador.newContext({ viewport: { width: 1024, height: 900 }, deviceScaleFactor: 1 });
+      const p = await ctx.newPage();
+      await p.goto(APP);
+      await p.fill('#token', 'demo-coordinador');
+      await p.click('#form-login button');
+      await p.locator('#pestanas').waitFor();
+      await p.click('#tab-evaluacion');
+      assert.equal(await p.textContent('#titulo'), 'Evaluación de riesgo');
+      const item = p.locator(`#lista-focos li[data-id="${id}"]`);
+      await item.waitFor();
+      assert.match(await item.textContent(), /Medio/);
+      await item.locator('button').click();
+      await p.locator('#detalle-foco').waitFor();
+      assert.match(await p.textContent('#detalle-justificacion'), /Comunidad habitada en el área de influencia: Concepción/);
+      assert.match(await p.textContent('#detalle-distancia'), /Distancia a comunidad: 10 km \(Concepción\)/);
+      assert.ok(await p.locator('input[name="nivel"][value="Medio"]').isDisabled(), 'no se puede elegir el nivel vigente');
+
+      await p.check('input[name="nivel"][value="Alto"]');
+      await p.fill('#justificacion', 'Humo muy denso');
+      assert.equal(await p.textContent('#contador'), '14/15 car.');
+      assert.ok(await p.locator('#guardar-reclasificacion').isDisabled(), 'DoD 3: bloqueado con 14 caracteres');
+      await p.fill('#justificacion', 'Humo muy denso hacia la comunidad');
+      assert.ok(await p.locator('#guardar-reclasificacion').isEnabled());
+      await p.screenshot({ path: `${CAPTURAS}04-evaluacion-riesgo.png`, fullPage: true });
+      await p.click('#guardar-reclasificacion');
+      await p.locator('#mensaje-reclasificacion', { hasText: '✔' }).waitFor();
+      assert.equal(await p.textContent('#detalle-nivel'), 'Alto');
+      assert.match(await p.textContent('#detalle-historial'), /Medio → Alto[\s\S]*Coordinador COED \(demo\)[\s\S]*Humo muy denso hacia la comunidad/);
+      await p.screenshot({ path: `${CAPTURAS}05-reclasificado.png`, fullPage: true });
+
+      const evaluacion = await api(`/incidentes/${id}/evaluacion`);
+      assert.equal(evaluacion.datos.nivelRiesgo, 'Alto');
+      assert.equal(evaluacion.datos.origenRiesgo, 'Manual');
+      await ctx.close();
     });
 
     await paso('RS-01: memoria de la app dentro del presupuesto de 120 MB', async () => {

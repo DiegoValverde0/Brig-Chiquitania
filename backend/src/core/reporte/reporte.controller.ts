@@ -19,6 +19,7 @@ import { Usuario } from '../seguridad/entities/usuario.entity';
 import { Rol } from '../seguridad/enums/rol.enum';
 import { Catalogo, CatalogoService, ComunidadCatalogo } from './catalogo.service';
 import { EvidenciaService } from './evidencia.service';
+import { PredioCatalogo, PrediosService } from './predios.service';
 import { ReporteService, VistaReporte } from './reporte.service';
 
 /** Cualquier usuario autenticado puede reportar un foco (en la práctica, sobre todo guardaparques/comunarios). */
@@ -28,6 +29,7 @@ export class ReporteController {
     private readonly reporte: ReporteService,
     private readonly evidencias: EvidenciaService,
     private readonly catalogo: CatalogoService,
+    private readonly predios: PrediosService,
   ) {}
 
   /** HU-1.1 / HU-1.2. 201 al crear; 200 si el UUID ya existía (reintento idempotente, RNF-01). */
@@ -96,5 +98,18 @@ export class ReporteController {
   @Roles(Rol.Coordinador)
   fijarContacto(@Param('id', ParseUUIDPipe) id: string, @Body() body: unknown): Promise<ComunidadCatalogo> {
     return this.catalogo.fijarContacto(id, body);
+  }
+
+  /** HU-2.1: catálogo de estancias y predios privados que el motor excluye de la priorización. */
+  @Get('predios-privados')
+  @Roles(Rol.Coordinador)
+  listarPredios(): Promise<PredioCatalogo[]> {
+    return this.predios.listar();
+  }
+
+  @Post('predios-privados')
+  @Roles(Rol.Coordinador)
+  crearPredio(@Body() body: unknown): Promise<PredioCatalogo> {
+    return this.predios.crear(body);
   }
 }
