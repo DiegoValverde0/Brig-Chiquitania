@@ -3,6 +3,8 @@ import { Comunidad } from './core/reporte/entities/comunidad.entity';
 import { ContactoComunal } from './core/reporte/entities/contacto-comunal.entity';
 import { Brigada } from './core/despacho/entities/brigada.entity';
 import { EstadoBrigada } from './core/despacho/enums/estado-brigada.enum';
+import { Rol } from './core/seguridad/enums/rol.enum';
+import { registrarUsuario } from './core/seguridad/seguridad.service';
 
 /**
  * Semilla idempotente del Walking Skeleton (T4): comunidades con contacto y brigadas con ubicación.
@@ -28,8 +30,25 @@ export const BRIGADAS: Array<{ id: string; nombre: string; latitud: number; long
   { id: '00000000-0000-4000-8000-000000000203', nombre: 'Brigada Departamental 3', latitud: -16.3667, longitud: -60.95 },
 ];
 
+/**
+ * Usuarios de demostración, uno por rol. Tokens fijos y públicos, SOLO para desarrollo y pruebas: en producción
+ * la semilla no los crea (los usuarios reales se dan de alta con POST /api/usuarios y reciben un token aleatorio).
+ */
+export const USUARIOS_DEMO: Array<{ id: string; nombre: string; rol: Rol; telefono: string; token: string }> = [
+  { id: '00000000-0000-4000-8000-000000000401', nombre: 'Guardaparque (demo)', rol: Rol.Guardaparque, telefono: '+59170000401', token: 'demo-guardaparque' },
+  { id: '00000000-0000-4000-8000-000000000402', nombre: 'Coordinador COED (demo)', rol: Rol.Coordinador, telefono: '+59170000402', token: 'demo-coordinador' },
+  { id: '00000000-0000-4000-8000-000000000403', nombre: 'Jefe de Brigada (demo)', rol: Rol.JefeBrigada, telefono: '+59170000403', token: 'demo-jefe-brigada' },
+  { id: '00000000-0000-4000-8000-000000000404', nombre: 'Responsable UGR (demo)', rol: Rol.ResponsableUGR, telefono: '+59170000404', token: 'demo-ugr' },
+];
+
 export async function aplicarSemilla(ds: DataSource): Promise<void> {
   await ds.transaction(async (em) => {
+    if (process.env.NODE_ENV !== 'production') {
+      for (const u of USUARIOS_DEMO) {
+        const { token, ...datos } = u;
+        await registrarUsuario(em, datos, token);
+      }
+    }
     for (const [i, c] of COMUNIDADES.entries()) {
       await em.save(Comunidad, {
         id: c.id,

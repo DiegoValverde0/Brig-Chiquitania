@@ -68,5 +68,5 @@ automática (NASA FIRMS/VIIRS), inventario de insumos.
 | Carpeta | Agente | Archivo de reglas |
 |---|---|---|
 | `backend/` | Claude (Arquitecto / Backend) | `backend/CLAUDE.md` |
-| `frontend/` | Gemini (Frontend / móvil) | `frontend/GEMINI.md` |
+| `frontend/` | Gemini (Frontend / móvil). **Temporalmente Claude**, por decisión del PO (29/09/2026), hasta que Gemini se incorpore | `frontend/GEMINI.md` |
 | `documentacion_base/` | Fuente de verdad (solo lectura para agentes, salvo pedido del PO) | — |

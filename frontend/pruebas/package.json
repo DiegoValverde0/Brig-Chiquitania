@@ -1,0 +1,12 @@
+{
+  "name": "brig-chiquitania-app-pruebas",
+  "private": true,
+  "description": "Pruebas de la app web en Chromium real (offline, cola, SMS simulado, memoria).",
+  "type": "module",
+  "scripts": {
+    "test": "node app.prueba.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.56.1"
+  }
+}

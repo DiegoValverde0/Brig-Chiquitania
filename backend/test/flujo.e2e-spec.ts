@@ -1,20 +1,21 @@
 import { randomUUID } from 'node:crypto';
-import { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import request from 'supertest';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DataSource } from 'typeorm';
-import { AppModule } from '../src/app.module';
-import { aplicarSemilla, BRIGADAS } from '../src/semilla';
-import { prepararBdPruebas } from './bd-pruebas';
+import { BRIGADAS } from '../src/semilla';
+import { Cliente, crearAppPruebas, TOKENS } from './app-pruebas';
 
 /**
  * DoD del Bolt 0: un foco reportado con GPS recorre Nuevo → riesgo → panel → brigada sugerida →
  * llegada → ΔT, sin tocar la BD a mano, y la auditoría es inmutable. Requiere PostgreSQL (ver README).
  */
 describe('Flujo E2E del Walking Skeleton (Bolt 0)', () => {
-  let app: INestApplication;
+  let app: NestExpressApplication;
   let ds: DataSource;
-  let http: () => ReturnType<typeof request>;
+  /** El coordinador opera el COED; el guardaparque reporta (RNF-08: acceso por rol). */
+  let coordinador: Cliente;
+  let guardaparque: Cliente;
+  let jefeBrigada: Cliente;
+  const http = (): Cliente => coordinador;
 
   // ~2 km al norte de Concepción (comunidad semilla) ⇒ riesgo Alto.
   const cercaDeConcepcion = { latitud: -16.1153, longitud: -62.0258, precisionMetros: 8 };
@@ -23,21 +24,19 @@ describe('Flujo E2E del Walking Skeleton (Bolt 0)', () => {
   const brigadaSanIgnacio = BRIGADAS[2].id;
 
   beforeAll(async () => {
-    await prepararBdPruebas();
-    const modulo = await Test.createTestingModule({ imports: [AppModule] }).compile();
-    app = modulo.createNestApplication();
-    app.setGlobalPrefix('api');
-    await app.init();
-    ds = app.get(DataSource);
-    await aplicarSemilla(ds);
-    http = () => request(app.getHttpServer());
+    const pruebas = await crearAppPruebas();
+    app = pruebas.app;
+    ds = pruebas.ds;
+    coordinador = pruebas.como(TOKENS.coordinador);
+    guardaparque = pruebas.como(TOKENS.guardaparque);
+    jefeBrigada = pruebas.como(TOKENS.jefeBrigada);
   });
 
   afterAll(async () => {
     await app?.close();
   });
 
-  const reportar = (cuerpo: object) => http().post('/api/incidentes').send(cuerpo);
+  const reportar = (cuerpo: object) => guardaparque.post('/api/incidentes').send(cuerpo);
 
   describe('flujo feliz', () => {
     const id = randomUUID();
@@ -105,7 +104,7 @@ describe('Flujo E2E del Walking Skeleton (Bolt 0)', () => {
     });
 
     it('HU-5.1 + HU-5.3: la llegada pasa el foco a "En atención" y calcula ΔT y el ahorro vs. 180 min', async () => {
-      const res = await http()
+      const res = await jefeBrigada
         .post(`/api/asignaciones/${asignacionId}/llegada`)
         .send({ latitud: -16.1150, longitud: -62.0255, precisionMetros: 10 })
         .expect(201);
@@ -139,6 +138,12 @@ describe('Flujo E2E del Walking Skeleton (Bolt 0)', () => {
         'En_Atencion',
       ]);
       expect(res.body[2].justificacion).toMatch(/ΔT = \d+(\.\d)? min/);
+      // HU-2.2 / RNF-07: quién hizo cada cambio (Bolt 1: usuarios con rol).
+      expect(res.body.map((h: { usuario: { rol: string } }) => h.usuario.rol)).toEqual([
+        'Guardaparque',
+        'Coordinador',
+        'JefeBrigada',
+      ]);
     });
 
     it('RNF-07: la BD rechaza editar o borrar el historial y reescribir los timestamps del KPI', async () => {

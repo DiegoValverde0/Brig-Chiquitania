@@ -13,12 +13,14 @@ export class HistorialEstadoService {
     estadoAnterior: EstadoIncidente | null,
     estadoNuevo: EstadoIncidente,
     justificacion: string,
+    usuarioId: string | null = null,
   ): Promise<void> {
     await em.insert(HistorialEstado, {
       incidente: { id: incidente.id },
       estadoAnterior,
       estadoNuevo,
       justificacion,
+      usuario: usuarioId ? { id: usuarioId } : null,
     });
   }
 }

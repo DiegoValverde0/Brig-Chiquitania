@@ -6,6 +6,7 @@ import { Brigada } from '../despacho/entities/brigada.entity';
 import { EstadoBrigada } from '../despacho/enums/estado-brigada.enum';
 import { Incidente } from '../triage/entities/incidente.entity';
 import { EstadoIncidente } from '../triage/enums/estado-incidente.enum';
+import { Rol } from '../seguridad/enums/rol.enum';
 import { HistorialEstado } from './entities/historial-estado.entity';
 import { HistorialEstadoService } from './historial-estado.service';
 
@@ -24,6 +25,16 @@ export interface TiempoDespacho {
   cumpleMeta: boolean;
 }
 
+/** Entrada del historial para la API: quién (sin datos sensibles), cuándo y el motivo. */
+export interface EntradaHistorial {
+  id: string;
+  creadoEn: Date;
+  estadoAnterior: EstadoIncidente | null;
+  estadoNuevo: EstadoIncidente;
+  justificacion: string;
+  usuario: { id: string; nombre: string; rol: Rol } | null;
+}
+
 @Injectable()
 export class OperacionesService {
   constructor(
@@ -32,7 +43,7 @@ export class OperacionesService {
   ) {}
 
   /** HU-5.1: registra hora y GPS de llegada (write-once); foco "En atención", brigada "En Combate Activo". */
-  async confirmarLlegada(asignacionId: string, body: unknown): Promise<TiempoDespacho> {
+  async confirmarLlegada(asignacionId: string, body: unknown, usuarioId: string | null = null): Promise<TiempoDespacho> {
     const datos = exigirObjeto(body);
     const punto = exigirPunto(datos);
     const precisionMetros =
@@ -75,6 +86,7 @@ export class OperacionesService {
         EstadoIncidente.Asignado,
         EstadoIncidente.En_Atencion,
         `Llegada confirmada por ${brigada.nombre}. ΔT = ${delta} min (línea base ${LINEA_BASE_MIN} min)`,
+        usuarioId,
       );
     });
     const asignacion = await this.dataSource
@@ -108,13 +120,23 @@ export class OperacionesService {
     };
   }
 
-  async historialDe(incidenteId: string): Promise<HistorialEstado[]> {
+  async historialDe(incidenteId: string): Promise<EntradaHistorial[]> {
     if (!(await this.dataSource.getRepository(Incidente).existsBy({ id: incidenteId }))) {
       throw new NotFoundException('Incidente no encontrado');
     }
-    return this.dataSource
-      .getRepository(HistorialEstado)
-      .find({ where: { incidente: { id: incidenteId } }, order: { creadoEn: 'ASC' } });
+    const entradas = await this.dataSource.getRepository(HistorialEstado).find({
+      where: { incidente: { id: incidenteId } },
+      relations: { usuario: true },
+      order: { creadoEn: 'ASC' },
+    });
+    return entradas.map((h) => ({
+      id: h.id,
+      creadoEn: h.creadoEn,
+      estadoAnterior: h.estadoAnterior,
+      estadoNuevo: h.estadoNuevo,
+      justificacion: h.justificacion,
+      usuario: h.usuario ? { id: h.usuario.id, nombre: h.usuario.nombre, rol: h.usuario.rol } : null,
+    }));
   }
 }
 
