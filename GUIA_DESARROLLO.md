@@ -6,7 +6,8 @@ gobernanza algorítmica, trámite municipal y estados tácticos, despacho y reas
 institucional).
 
 > Todos los comandos se ejecutan desde la raíz del repositorio, salvo que se indique otra carpeta.
-> En Windows, usar PowerShell o Git Bash; los comandos `curl` de ejemplo están escritos para Bash.
+> En Windows, usar PowerShell. Los scripts del proyecto son de Node (`.mjs`): no hace falta bash, WSL ni Git Bash.
+> Los `curl` de ejemplo están escritos para Bash; en PowerShell escribir `curl.exe`.
 
 ---
 
@@ -139,10 +140,10 @@ Abrir <http://localhost:8080> en Chrome.
 ### 3.4 Flujo del coordinador por API (Bolt 0 con roles)
 
 La interfaz del coordinador llega en los próximos bolts; mientras tanto, el flujo completo se recorre con
-un script (requiere `curl` y `node`):
+un script de Node (sin bash ni curl; funciona igual en PowerShell):
 
 ```bash
-sh backend/scripts/flujo-e2e.sh
+node backend/scripts/flujo-e2e.mjs
 # 1) Reporte GPS … 5) Despacho … 6) Llegada: ΔT = 60 min, ahorro 66.7 % vs. 180 min … 7) Historial
 ```
 
@@ -228,7 +229,7 @@ anteriores quedan como "referencia sin archivo".
    rechazar, el motivo exige 15 caracteres; una carta rechazada bloquea el despacho y el foco vuelve a la
    bandeja de la UGR con el motivo.
 5. **Estados tácticos (RF-08).** Despachar la Brigada 3 a un foco con carta y confirmar la llegada (el script
-   `backend/scripts/flujo-e2e.sh` lo hace por API). Ingresar con `demo-jefe-brigada` → pestaña **Mi brigada**:
+   `backend/scripts/flujo-e2e.mjs` lo hace por API). Ingresar con `demo-jefe-brigada` → pestaña **Mi brigada**:
    aparece "En combate activo" y el botón **Reportar: EN LIQUIDACIÓN / POR FINALIZAR**. Al confirmarlo, la
    brigada y su foco pasan a En liquidación. En el panel del coordinador, **Liberar brigada** la deja Disponible.
 
@@ -299,7 +300,7 @@ Actualizar desde el Bolt 4: `docker compose up -d --build`. No hace falta borrar
 `informe_consolidado` del Bolt 0 estaban vacías y se reemplazan por las del UML).
 
 1. **Foco en atención.** Despachar una brigada a un foco con carta y confirmar la llegada (3.8, o el script
-   `backend/scripts/flujo-e2e.sh`, que ahora recorre también la bitácora y el cierre).
+   `backend/scripts/flujo-e2e.mjs`, que ahora recorre también la bitácora y el cierre).
 2. **Bitácora sin conexión (HU-5.2).** Ingresar con el jefe de esa brigada (entra directo a **Mi brigada**). Bajo la
    orden aparece **Bitácora de turno**: tocar lo que cambió (agua, combustible, herramientas, **−/+** de km y de %
    de control) y **GUARDAR BITÁCORA**. En DevTools → *Network* → *Offline*: queda **En cola** con el SMS `BRC1 B`
@@ -326,44 +327,60 @@ docker compose exec db psql -U chiquitania -d chiquitania_db \
 ## 4. Pruebas automatizadas
 
 Las pruebas corren con Node 22 **fuera de Docker**, contra el PostgreSQL del contenedor `db` (puerto 5432).
-La base `chiquitania_db` no se toca: las pruebas e2e crean y vacían su propia base `chiquitania_test`.
+La base `chiquitania_db` no se toca en las unitarias ni en las e2e: estas crean y vacían su propia base
+`chiquitania_test`. Todo funciona igual en Windows (PowerShell), macOS y Linux: no hace falta bash, WSL ni curl.
 
-### 4.1 Backend: unitarias y e2e
+### 4.1 Todo junto, con evidencias (recomendado)
 
-```bash
-docker compose up -d db          # basta con la base de datos
-cd backend
-npm ci
-npm test                         # unitarias (sin BD): cifrado, codec SMS, geografía, motor, validación, panel, estados
-npm run test:e2e                 # Bolts 0 a 5 contra PostgreSQL (incluye un servicio de push falso local)
-cd ..
+Desde la raíz del repositorio:
+
+```powershell
+docker compose up -d --build
+cd backend; npm ci; cd ..
+cd frontend/pruebas; npm ci; cd ../..
+node scripts/evidencias.mjs
 ```
 
-Resultado esperado al cierre del Bolt 5: **76 unitarias** y **94 e2e** en verde.
+Corre en orden: salud de la API, **unitarias** con cobertura, **e2e**, **flujo completo por API**,
+**inmutabilidad RNF-07** (4 intentos de modificar/borrar que la base debe rechazar) y la **app en Chrome**. Deja
+todo en `evidencias/` (no se versiona):
 
-### 4.2 App web en el navegador (Playwright)
+| Archivo | Contenido | Esperado |
+|---|---|---|
+| `RESUMEN.md` | Portada: fecha, commit, entorno y tabla ✅/❌ por paso | todo ✅ |
+| `00-health.txt` | `GET /api/health` | `{"status":"ok","db":"up"}` |
+| `01-unitarias.txt` + `cobertura/lcov-report/index.html` | Jest detallado y cobertura | 76/76 |
+| `02-e2e.txt` | Jest e2e de los Bolts 0 a 5 | 94/94 |
+| `03-flujo-api.txt` | Reporte → despacho → llegada (ΔT) → bitácora → cierre con PDF | 9/9 pasos |
+| `04-inmutabilidad.txt` | UPDATE/DELETE/TRUNCATE sobre la auditoría | 4/4 rechazados |
+| `05-navegador.txt` + `capturas/` | Playwright en Chrome, capturas a 360 y 1366 px | 18/18 |
 
-Requiere el entorno levantado y la semilla aplicada (sección 2), y un Chrome/Chromium local. La prueba despacha
-brigadas: antes de repetirla, volver a aplicar la semilla (deja las 4 brigadas Disponibles).
+Opciones: `--solo e2e,navegador` repite solo esos pasos (valores: `health`, `unitarias`, `e2e`, `flujo`,
+`inmutabilidad`, `navegador`); `--seguir` no se detiene en el primer fallo. Chrome se encuentra solo en su ruta
+habitual; si está en otra, definir `CHROMIUM` (PowerShell: `$env:CHROMIUM = "D:\...\chrome.exe"`). Antes del
+flujo y del navegador se aplica la semilla (las pruebas despachan brigadas).
 
-```bash
-cd frontend/pruebas
-npm ci
-# Indicar el ejecutable del navegador si no está en /opt/pw-browsers/chromium:
-#   Linux:   export CHROMIUM=/usr/bin/google-chrome
-#   macOS:   export CHROMIUM="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-#   Windows (cmd): set CHROMIUM=C:\Program Files\Google\Chrome\Application\chrome.exe
-APP=http://localhost:8080 npm test
-# Windows (cmd): set APP=http://localhost:8080  y luego  npm test
-cd ../..
+### 4.2 Paso a paso (cada comando desde la raíz del repositorio)
+
+```powershell
+# Unitarias (sin BD)
+cd backend; npx jest --verbose; cd ..
+# E2E contra PostgreSQL (docker compose up -d db basta)
+cd backend; npx jest --config test/jest-e2e.json --runInBand --verbose; cd ..
+# Flujo completo por API (con la semilla aplicada)
+docker compose exec api node dist/seed
+node backend/scripts/flujo-e2e.mjs
+# App en Chrome (volver a aplicar la semilla antes de cada corrida)
+docker compose exec api node dist/seed
+cd frontend/pruebas; $env:APP = "http://localhost:8080"; npm test; cd ../..
 ```
 
-Resultado esperado: **18/18 pasos OK** (inicio de sesión, reporte GPS con foto, cola sin conexión, recarga sin
-red, sincronización, SMS simulado, evaluación y reclasificación del coordinador; Bolt 3: 60 focos simulados, jefe
-de brigada "En Liquidación", carta de la UGR, panel COED a 1366 px con filtros, validación y rechazo, panel a
-360 px; Bolt 4: despacho en 1 clic con doble clic, orden de salida leída y llegada por GPS, reactivación y
-reasignación en 1 clic; Bolt 5: bitácora sin conexión que se sincroniza sola y cierre con descarga del PDF; y
-memoria). Las capturas quedan en `frontend/pruebas/capturas/`.
+En Bash/macOS la última línea es `cd frontend/pruebas && APP=http://localhost:8080 npm test && cd ../..`.
+La prueba del navegador cubre inicio de sesión, reporte GPS con foto, cola sin conexión, recarga sin red,
+sincronización, SMS simulado, evaluación y reclasificación; Bolt 3: 60 focos simulados, jefe "En Liquidación",
+carta de la UGR, panel COED a 1366 px con filtros, validación y rechazo, panel a 360 px; Bolt 4: despacho en 1 clic
+con doble clic, orden de salida leída y llegada por GPS, reactivación y reasignación; Bolt 5: bitácora sin conexión
+y cierre con descarga del PDF; y memoria (RS-01). Las capturas quedan en `frontend/pruebas/capturas/`.
 
 ### 4.3 Desarrollo de la API sin Docker (opcional)
 
@@ -390,7 +407,9 @@ npm run start:dev                # API en :3000 y, con FRONTEND_DIR, también la
 | Desde un teléfono en la misma red el GPS no funciona | El navegador solo permite geolocalización en `localhost` o con **HTTPS**. Para pruebas, usar el reporte a distancia o configurar TLS. |
 | Cambios del frontend no se ven | Caché del service worker: *Unregister* y `Ctrl+Shift+R` (3.3). |
 | La prueba del navegador no encuentra Chromium | Definir la variable `CHROMIUM` con la ruta al ejecutable (4.2). |
-| Windows/PowerShell: `sh : El término 'sh' no se reconoce` | Ejecutar los scripts `.sh` desde **Git Bash** (`bash backend/scripts/flujo-e2e.sh`) o WSL. |
+| Windows/PowerShell: `bash` responde `WSL … execvpe(/bin/bash) failed` | Ese `bash` es el de WSL sin distribución. Ya no hace falta: el flujo es `node backend/scripts/flujo-e2e.mjs`. |
+| La prueba del navegador falla con `mkdir 'C:\C:\Users\…'` | Versión anterior de `app.prueba.mjs`: `git pull origin main`. |
+| `UPDATE 0` en vez de error al probar la inmutabilidad | Las tablas estaban vacías (un trigger por fila no se dispara sin filas). Correr antes el flujo, o usar `node scripts/evidencias.mjs --solo flujo,inmutabilidad`. |
 | Windows/PowerShell: `curl` pide "Advertencia de seguridad" | En PowerShell `curl` es `Invoke-WebRequest`: usar `curl.exe http://localhost:3000/api/health` (el `curl` real). |
 | La semilla muestra `DeprecationWarning: Calling client.query() when the client is already executing a query` | Viene de TypeORM al sincronizar el esquema (`DB_SYNCHRONIZE=true`, solo desarrollo); es inofensiva y desaparece con las migraciones (Release 1.0). |
 

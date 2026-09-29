@@ -31,7 +31,7 @@ API también sirve la app en <http://localhost:3000>).
 
 **Bolt 0 — Walking Skeleton:** reporte GPS → **Nuevo** con riesgo calculado → panel → brigada sugerida → carta
 municipal (Ley 602) → despacho confirmado por un humano → llegada → **ΔT** y % de ahorro frente a 180 min, con
-historial append-only (`sh backend/scripts/flujo-e2e.sh` lo recorre con curl).
+historial append-only (`node backend/scripts/flujo-e2e.mjs` lo recorre por API).
 
 **Bolt 1 — Captura resiliente y contacto comunal:**
 - App web instalable (PWA) sin mapas ni frameworks: GPS ≤15 m o avistamiento a distancia (comunidad + rumbo +
@@ -137,9 +137,11 @@ bitácora de turno, `BRC1 B <foco> <id> <agua S|C> <combustible O|R> <herramient
 
 ## Pruebas
 
+- **Todo junto, con evidencias:** `node scripts/evidencias.mjs` (Windows, macOS o Linux; solo Node 22 y Docker) corre
+  unitarias, e2e, flujo por API, inmutabilidad RNF-07 y navegador, y deja `evidencias/RESUMEN.md` (GUIA §4.1).
 - `backend/`: `npm test` (unitarias) y `npm run test:e2e` (requiere PostgreSQL; crea y vacía la BD `chiquitania_test`).
 - `frontend/pruebas/`: `npm ci && APP=http://localhost:8080 npm test` recorre la app en Chromium (sin conexión,
   cola, SMS simulado, evaluación de riesgo, panel COED con 60 focos, cartas y estados de brigada, despacho en
   1 clic, orden de salida, reactivación y reasignación, bitácora sin conexión, cierre con informe PDF, memoria).
-  Requiere Chromium (`CHROMIUM=/ruta/al/binario`) y una BD recién sembrada (`npm run seed` deja las brigadas
+  Usa el Chrome instalado (u otra ruta con `CHROMIUM=/ruta/al/binario`) y una BD recién sembrada (`npm run seed` deja las brigadas
   Disponibles).
