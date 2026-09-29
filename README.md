@@ -6,6 +6,9 @@ App web: [`frontend/GEMINI.md`](frontend/GEMINI.md). Documentación de referenci
 
 ## Puesta en marcha
 
+Guía paso a paso para desarrollo con Docker y para ejecutar todas las pruebas:
+[`GUIA_DESARROLLO.md`](GUIA_DESARROLLO.md).
+
 ```bash
 docker compose up -d --build                  # PostgreSQL 16 + API (:3000/api) + app web con nginx (:8080)
 docker compose exec api node dist/seed        # comunidades, contactos, brigadas y usuarios demo
