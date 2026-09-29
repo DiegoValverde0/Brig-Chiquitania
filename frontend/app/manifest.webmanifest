@@ -1,0 +1,12 @@
+{
+  "name": "Reporte de focos de calor — Chiquitanía",
+  "short_name": "Focos Chiquitanía",
+  "description": "Reporte georreferenciado de focos de calor, con funcionamiento sin conexión y respaldo por SMS.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f4f4",
+  "theme_color": "#b71c1c",
+  "icons": [{ "src": "icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

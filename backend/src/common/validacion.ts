@@ -26,6 +26,24 @@ export function exigirTexto(valor: unknown, campo: string, maxLargo: number): st
   return valor.trim();
 }
 
+/** Teléfono boliviano o internacional: dígitos con "+" opcional, 7 a 15 dígitos (E.164). */
+const TELEFONO = /^\+?[0-9]{7,15}$/;
+
+export function exigirTelefono(valor: unknown, campo = 'telefono'): string {
+  const limpio = typeof valor === 'string' ? valor.replace(/[\s-]/g, '') : '';
+  if (!TELEFONO.test(limpio)) {
+    throw new BadRequestException(`${campo} debe tener entre 7 y 15 dígitos (se admite "+" inicial)`);
+  }
+  return limpio;
+}
+
+export function exigirEnum<T extends string>(valor: unknown, campo: string, valores: readonly T[]): T {
+  if (typeof valor !== 'string' || !valores.includes(valor as T)) {
+    throw new BadRequestException(`${campo} debe ser uno de: ${valores.join(', ')}`);
+  }
+  return valor as T;
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function exigirUuid(valor: unknown, campo: string): string {

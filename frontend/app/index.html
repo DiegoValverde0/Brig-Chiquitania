@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#b71c1c">
+  <title>Reporte de focos — Chiquitanía</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <!-- Inicio de sesión: el coordinador entrega el token de acceso a cada usuario (RNF-08). -->
+  <main id="vista-login" class="vista" hidden>
+    <h1>Reporte de focos de calor</h1>
+    <p class="nota">Chiquitanía · Gobernación de Santa Cruz</p>
+    <form id="form-login" class="tarjeta">
+      <label for="token">Código de acceso</label>
+      <input id="token" name="token" type="password" autocomplete="current-password" required
+             placeholder="Entregado por la central">
+      <button type="submit" class="boton boton-principal">Entrar</button>
+      <p id="error-login" class="error" role="alert"></p>
+    </form>
+  </main>
+
+  <main id="vista-principal" class="vista" hidden>
+    <header class="barra">
+      <div>
+        <h1>Reportar foco de calor</h1>
+        <p id="usuario" class="nota"></p>
+      </div>
+      <span id="estado-red" class="insignia" aria-live="polite"></span>
+    </header>
+
+    <!-- CU-01: reporte georreferenciado, sin mapas (RF-01, RS-01) -->
+    <form id="form-reporte" class="tarjeta" novalidate>
+      <fieldset class="modos">
+        <legend class="oculto">¿Cómo ve el foco?</legend>
+        <label class="opcion"><input type="radio" name="modo" value="GPS" checked> Vi el foco de cerca</label>
+        <label class="opcion"><input type="radio" name="modo" value="Distancia"> Lo veo a la distancia</label>
+      </fieldset>
+
+      <section id="seccion-gps">
+        <button type="button" id="capturar-gps" class="boton">📍 Capturar coordenadas GPS</button>
+        <p id="lectura-gps" class="lectura" aria-live="polite">Sin coordenadas todavía</p>
+      </section>
+
+      <section id="seccion-distancia" hidden>
+        <label for="comunidad">Comunidad más cercana a usted</label>
+        <select id="comunidad"></select>
+        <fieldset class="rumbos">
+          <legend>¿Hacia dónde ve el humo?</legend>
+          <label><input type="radio" name="rumbo" value="N"> Norte</label>
+          <label><input type="radio" name="rumbo" value="S"> Sur</label>
+          <label><input type="radio" name="rumbo" value="E"> Este</label>
+          <label><input type="radio" name="rumbo" value="O"> Oeste</label>
+        </fieldset>
+        <label for="distancia">Distancia estimada (km)</label>
+        <input id="distancia" type="number" inputmode="decimal" min="0.1" max="50" step="0.1" placeholder="Ej.: 3">
+      </section>
+
+      <section class="foto">
+        <label class="boton" for="archivo-foto">📷 Adjuntar foto (opcional)</label>
+        <input id="archivo-foto" type="file" accept="image/*" capture="environment" hidden>
+        <div id="vista-foto" hidden>
+          <img id="miniatura" alt="Foto adjunta">
+          <span id="peso-foto" class="nota"></span>
+          <button type="button" id="quitar-foto" class="enlace">Quitar</button>
+        </div>
+      </section>
+
+      <section id="contacto" class="contacto" aria-live="polite">
+        <p class="nota">El contacto comunal aparecerá al ubicar el foco.</p>
+      </section>
+
+      <button type="submit" id="enviar" class="boton boton-principal">ENVIAR REPORTE</button>
+      <p id="aviso-envio" class="aviso" hidden></p>
+      <p id="error-reporte" class="error" role="alert"></p>
+    </form>
+
+    <section>
+      <h2>Mis reportes</h2>
+      <ul id="lista-reportes" class="lista"></ul>
+    </section>
+
+    <details class="tarjeta ajustes">
+      <summary>Ajustes</summary>
+      <p class="nota">Número de la central para SMS: <strong id="numero-central">—</strong></p>
+      <label class="opcion"><input type="checkbox" id="simular-sin-datos"> Simular falta de datos (pruebas del canal SMS)</label>
+      <p class="nota">Catálogo comunal: <span id="version-catalogo">sin descargar</span></p>
+      <button type="button" id="cerrar-sesion" class="enlace">Cerrar sesión</button>
+    </details>
+  </main>
+
+  <template id="plantilla-reporte">
+    <li class="reporte">
+      <div class="cabecera-reporte">
+        <strong class="titulo"></strong>
+        <span class="insignia estado"></span>
+      </div>
+      <p class="detalle nota"></p>
+      <div class="sms" hidden>
+        <p class="nota">Sin datos: envíe este SMS a la central (≤160 caracteres).</p>
+        <code class="texto-sms"></code>
+        <div class="acciones">
+          <a class="boton abrir-sms">✉ Abrir SMS</a>
+          <button type="button" class="boton simular-sms">Simular envío SMS</button>
+        </div>
+      </div>
+    </li>
+  </template>
+
+  <script src="js/sms.js"></script>
+  <script src="js/geo.js"></script>
+  <script src="js/almacen.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/foto.js"></script>
+  <script src="js/sync.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

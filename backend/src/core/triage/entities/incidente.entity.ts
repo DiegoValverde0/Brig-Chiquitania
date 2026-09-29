@@ -1,7 +1,9 @@
 import { Column, Entity, JoinColumn, ManyToOne, OneToOne, Relation } from 'typeorm';
 import { EntidadBase } from '../../../common/entidad-base';
-import { Coordenada } from '../../reporte/entities/coordenada.entity';
+import { CoordenadaCifrada } from '../../reporte/entities/coordenada-cifrada.entity';
+import { EvidenciaFotografica } from '../../reporte/entities/evidencia-fotografica.entity';
 import { Comunidad } from '../../reporte/entities/comunidad.entity';
+import { Rumbo } from '../../reporte/enums/rumbo.enum';
 import { TipoReporte } from '../../reporte/enums/tipo-reporte.enum';
 import { NivelRiesgo } from '../enums/nivel-riesgo.enum';
 import { EstadoIncidente } from '../enums/estado-incidente.enum';
@@ -31,9 +33,17 @@ export class Incidente extends EntidadBase {
   @Column({ name: 'resultado_cierre', type: 'enum', enum: ResultadoCierre, nullable: true })
   resultadoCierre: ResultadoCierre | null;
 
-  /** Composición 1–1 con Coordenada (columnas embebidas). */
-  @Column(() => Coordenada, { prefix: false })
-  coordenada: Coordenada;
+  /** Composición 1–1 con Coordenada (columnas embebidas, latitud y longitud cifradas: RNF-08). */
+  @Column(() => CoordenadaCifrada, { prefix: false })
+  coordenada: CoordenadaCifrada;
+
+  /** HU-1.2: hito cardinal del avistamiento a distancia (nulo en reportes GPS) [inferencia de atributo]. */
+  @Column({ type: 'enum', enum: Rumbo, nullable: true })
+  rumbo: Rumbo | null;
+
+  /** HU-1.2: distancia estimada en km desde la comunidad de referencia (nulo en reportes GPS). */
+  @Column({ name: 'distancia_estimada_km', type: 'real', nullable: true })
+  distanciaEstimadaKm: number | null;
 
   /** 0..1: comunidad habitada más cercana, fuente del contacto comunal obligatorio. */
   @ManyToOne(() => Comunidad, { nullable: true })
@@ -43,6 +53,10 @@ export class Incidente extends EntidadBase {
   /** Multiplicidad 0..1 (Ley N.º 602): la carta municipal puede no existir aún. */
   @OneToOne(() => CartaMunicipal, (carta) => carta.incidente)
   cartaMunicipal?: Relation<CartaMunicipal> | null;
+
+  /** 0..1: fotografía opcional del reporte (HU-1.1, RF-03). */
+  @OneToOne(() => EvidenciaFotografica, (evidencia) => evidencia.incidente)
+  evidencia?: Relation<EvidenciaFotografica> | null;
 
   /** ΔT del KPI en minutos (HU-5.3): T_llegada − T_reporte. */
   calcularTiempoDespacho(llegada: Date): number {

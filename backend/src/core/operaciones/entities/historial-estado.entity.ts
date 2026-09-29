@@ -1,12 +1,12 @@
 import { Column, Entity, JoinColumn, ManyToOne, Relation } from 'typeorm';
 import { EntidadBase } from '../../../common/entidad-base';
+import { Usuario } from '../../seguridad/entities/usuario.entity';
 import { Incidente } from '../../triage/entities/incidente.entity';
 import { EstadoIncidente } from '../../triage/enums/estado-incidente.enum';
 
 /**
  * Bitácora de auditoría del ciclo de vida del incidente (RNF-07).
  * Append-only: la BD rechaza UPDATE y DELETE (ver AuditoriaInmutableService).
- * El "quién" se agrega con Usuario/roles en el Bolt 1.
  */
 @Entity('historial_estado')
 export class HistorialEstado extends EntidadBase {
@@ -23,4 +23,9 @@ export class HistorialEstado extends EntidadBase {
   /** Obligatoria (UML): motivo del cambio, automático o humano. */
   @Column({ type: 'text' })
   justificacion: string;
+
+  /** Quién hizo el cambio (HU-2.2: "quién, cuándo y el motivo"). Nulo en entradas automáticas (p. ej. SMS). */
+  @ManyToOne(() => Usuario, { nullable: true })
+  @JoinColumn({ name: 'usuario_id' })
+  usuario: Relation<Usuario> | null;
 }

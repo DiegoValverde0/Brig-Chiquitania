@@ -7,6 +7,7 @@ import { TriageModule } from './core/triage/triage.module';
 import { DespachoModule } from './core/despacho/despacho.module';
 import { OperacionesModule } from './core/operaciones/operaciones.module';
 import { SyncModule } from './core/sync/sync.module';
+import { SeguridadModule } from './core/seguridad/seguridad.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { SyncModule } from './core/sync/sync.module';
     DespachoModule,
     OperacionesModule,
     SyncModule,
+    SeguridadModule,
   ],
   controllers: [HealthController],
 })

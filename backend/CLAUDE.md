@@ -8,21 +8,25 @@ Modelo de referencia: `documentacion_base/Modelos_UML.md`. Alcance por bolt: `do
 - **TypeORM 0.3** + **PostgreSQL 16** (driver `pg`). Coordenadas como `double precision` (sin PostGIS en el MVP).
 - `@nestjs/config` para variables de entorno (`.env.example`).
 - Docker: `backend/Dockerfile` multietapa (deps → build → runtime `node:22-alpine`, usuario no root) y
-  `docker-compose.yml` en la raíz (`db` + `api`).
+  `docker-compose.yml` en la raíz (`db` + `api` + `web` con nginx para la app de `frontend/app`).
+- Sin dependencias nuevas de runtime en el Bolt 1: cifrado con `node:crypto`, validación manual, SMS por puerto propio.
 
 ## Estructura
 ```
 backend/src/
-├── main.ts                 # prefijo global /api
+├── main.ts / configurar-app.ts  # prefijo /api, límites de cuerpo (JSON 16 KB, fotos 100 KB), estáticos opcionales
 ├── app.module.ts           # ConfigModule + TypeORM (autoLoadEntities)
-├── health.controller.ts    # GET /api/health (SELECT 1)
-├── common/entidad-base.ts  # id UUID, creado_en, actualizado_en
+├── health.controller.ts    # GET /api/health (SELECT 1, público)
+├── seed.ts / semilla.ts    # semilla idempotente (usuarios demo solo fuera de producción)
+├── crear-usuario.ts        # alta por consola (primer coordinador en producción)
+├── common/                 # entidad-base, validacion, geo, cifrado (AES-256-GCM), filtro de errores de cuerpo
 └── core/
-    ├── reporte/      (M1)       entities/, enums/
-    ├── triage/       (M2)
+    ├── reporte/      (M1)  reporte GPS/distancia, evidencia fotográfica, catálogo comunal
+    ├── triage/       (M2)  incidente, carta municipal, motor de riesgo
     ├── despacho/     (M3 / M4)
-    ├── operaciones/  (M4 / M5)
-    └── sync/         (MT-1, transversal)
+    ├── operaciones/  (M4 / M5)  llegada, ΔT, historial append-only
+    ├── seguridad/    (MT-2)  usuarios, roles, guard global
+    └── sync/         (MT-1)  canal SMS: codec BRC1, pasarela (puerto + simulada), webhook, bandeja
 ```
 Un `@Module` por paquete UML `core.*`; cada módulo registra sus entidades con `TypeOrmModule.forFeature` y
 exporta `TypeOrmModule`.
@@ -40,6 +44,17 @@ exporta `TypeOrmModule`.
   para bitácora). Pensar siempre en el cliente sin red.
 - Evitar dependencias pesadas; cada librería nueva requiere justificación frente a los límites de memoria.
 - `synchronize: true` solo en desarrollo (`DB_SYNCHRONIZE`); antes del piloto se pasa a migraciones.
+- **Acceso (RNF-08):** guard global (`seguridad/autenticacion.guard.ts`). Toda ruta nueva exige token; se marca
+  `@Publico()` solo si tiene otra autenticación (webhook) o es monitoreo. Restringir con `@Roles(...)` y leer el
+  usuario con `@UsuarioActual()`; pasar su id a `HistorialEstadoService.registrarCambio` (el "quién").
+- **Cifrado (RNF-08):** datos personales o de ubicación del reporte con los transformers `textoCifrado` /
+  `numeroCifrado` (`common/cifrado.ts`) en columnas `text`; nunca filtrar ni ordenar por ellas en SQL (las
+  distancias se calculan en la aplicación). Escribir con `save`/`insert` de entidades (con `update` parcial el
+  transformer también aplica, pero validar largos antes de cifrar). Archivos: `cifrarBytes` antes de escribir.
+- **SMS:** todo mensaje saliente pasa por `SmsService.enviar` (normaliza a GSM-7, ≤160, y lo registra). Un
+  proveedor real es otra subclase de `PasarelaSms` registrada en `crearPasarelaSms`.
+- El codec SMS y los cálculos geográficos tienen copia en `frontend/app/js/`; las pruebas unitarias verifican
+  que coincidan. Cambiar ambos lados a la vez.
 
 ## Límites de recursos (VPS)
 - PostgreSQL: `shared_buffers=128MB`, `max_connections=30`, `mem_limit 384m`.
@@ -55,6 +70,7 @@ curl localhost:3000/api/health        # {"status":"ok","db":"up"}
 npm test                              # unitarias (sin BD)
 npm run test:e2e                      # flujo E2E contra PostgreSQL (BD chiquitania_test, se recrea)
 sh scripts/flujo-e2e.sh               # mismo flujo por curl contra una API en marcha con semilla
+node dist/crear-usuario "Nombre" Coordinador   # alta por consola; imprime el token una vez
 ```
 
 ## Flujo E2E del Bolt 0 (endpoints en README raíz)
@@ -80,7 +96,17 @@ Alineado en el Bolt 0 (PR A del plan aprobado por el PO el 28/09/2026):
   UPDATE/DELETE/TRUNCATE; `incidente.fecha_reporte` y `asignacion_despacho.timestamp_confirmacion_llegada`
   son write-once (RNF-07).
 - Inferencias: ids UUID también en `Comunidad` y `Brigada` (el UML dice `int`) por el cliente offline;
-  `HistorialEstado.estadoAnterior` agregado para reconstruir el ciclo; el "quién" llega con `Usuario` (Bolt 1).
+  `HistorialEstado.estadoAnterior` agregado para reconstruir el ciclo.
+
+Bolt 1 (captura resiliente):
+- `EvidenciaFotografica` (UML) 0..1 con `Incidente`: metadatos en BD, archivo cifrado en `EVIDENCIAS_DIR`;
+  además `tipoMime` y `sha256` (idempotencia del reenvío) [inferencia].
+- `Usuario` con `rol` en una sola tabla (el UML lo modela abstracto con 4 subclases, inferencia del equipo);
+  token de acceso guardado como SHA-256. `HistorialEstado.usuario` registra quién hizo cada cambio.
+- `Incidente`: `rumbo` y `distanciaEstimadaKm` para el avistamiento a distancia [inferencia de atributos];
+  latitud/longitud cifradas (`CoordenadaCifrada`); las coordenadas de catálogo (comunidades, brigadas) siguen en claro.
+- `ContactoComunal`: nombre y teléfono cifrados. `MensajeSms` (nueva, `core.sync`): bitácora de SMS con número
+  y texto cifrados.
 
 Pendiente para bolts posteriores:
 
@@ -88,7 +114,9 @@ Pendiente para bolts posteriores:
 |---|---|---|---|
 | `Bitacora` | fecha, nivelAgua, nivelCombustible, herramientasOperativas, kmFajaMitigados, porcentajeControl; 0..* por Incidente | fechaHora, descripcion (texto libre) ligada a AsignacionDespacho | 5 |
 | `InformeConsolidado` | fechaGeneracion, contenidoPDF, tiempoTotalDespacho, justificacionFalsoPositivo; 0..1 por Incidente | resumen, fechaCierre, hectareasAfectadas; ligado a AsignacionDespacho | 5 |
-| Clases faltantes | EvidenciaFotografica (1), Usuario + 4 roles (1, inferencia), Notificacion (4) | — | — |
+| `Notificacion` | canal, contenido, estadoEnvio; 1..* por AsignacionDespacho (Web Push / SMS al jefe de brigada) | — (la pasarela SMS ya existe) | 4 |
+| Exclusión de estancias y umbral "Medio" | Motor de riesgo completo con explicabilidad | Regla única <5 km | 2 |
+| Migraciones | Esquema versionado antes del piloto | `synchronize` | 1.0 |
 
 Datos semilla (comunidades con contacto y brigadas, coordenadas aproximadas y contactos ficticios):
 `npm run build && npm run seed` (en Docker: `docker compose exec api node dist/seed`). Es idempotente.

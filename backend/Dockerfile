@@ -23,6 +23,8 @@ WORKDIR /app
 COPY --from=build --chown=node:node /app/package.json ./
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
+# Almacén de evidencias (fotos cifradas); en docker compose se monta un volumen aquí.
+RUN mkdir -p /app/almacen/evidencias && chown -R node:node /app/almacen
 USER node
 EXPOSE 3000
 CMD ["node", "dist/main"]

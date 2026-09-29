@@ -99,7 +99,7 @@ export class DespachoService {
    * HU-4.1: confirmación humana del despacho. Todo en una transacción; el foco pasa a "Asignado"
    * y la brigada a "En Desplazamiento". Guardas: Ley 602 (carta), contacto comunal, riesgo y disponibilidad.
    */
-  async asignar(incidenteId: string, body: unknown): Promise<OrdenDeSalida> {
+  async asignar(incidenteId: string, body: unknown, usuarioId: string | null = null): Promise<OrdenDeSalida> {
     const brigadaId = exigirUuid(exigirObjeto(body).brigadaId, 'brigadaId');
 
     return this.dataSource.transaction(async (em) => {
@@ -136,6 +136,7 @@ export class DespachoService {
         EstadoIncidente.Nuevo,
         EstadoIncidente.Asignado,
         `Despacho confirmado por el coordinador: ${brigada.nombre}`,
+        usuarioId,
       );
       const guardada = await em.findOneByOrFail(AsignacionDespacho, { id: asignacion.id });
       return {
