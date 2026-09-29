@@ -18,7 +18,8 @@
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync } from 'node:fs';
+import { sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync, crc32 } from 'node:zlib';
 import { chromium } from 'playwright-core';
@@ -195,7 +196,24 @@ const tarjeta = (pagina, texto) => pagina.locator('#lista-reportes li.reporte', 
 
 async function main() {
   mkdirSync(CAPTURAS, { recursive: true });
-  const navegador = await chromium.launch({ executablePath: CHROMIUM });
+  // VER=1: ventana visible y pausa entre acciones (VER_MS, 400 ms por defecto) para seguir la prueba en vivo.
+  const ver = process.env.VER === '1';
+  const navegador = await chromium.launch({
+    executablePath: CHROMIUM,
+    headless: !ver,
+    slowMo: ver ? Number(process.env.VER_MS ?? 400) : 0,
+  });
+  // VIDEO=1: un .webm por contexto en capturas/videos/ (salvo en la medición de memoria, que se falsearía).
+  const videos = [];
+  if (process.env.VIDEO === '1') {
+    const crear = navegador.newContext.bind(navegador);
+    navegador.newContext = async ({ sinVideo, ...opciones } = {}) => {
+      if (sinVideo) return crear(opciones);
+      const ctx = await crear({ ...opciones, recordVideo: { dir: `${CAPTURAS}videos`, size: opciones.viewport } });
+      ctx.on('page', (p) => videos.push(p.video()));
+      return ctx;
+    };
+  }
   const contexto = await navegador.newContext({
     viewport: { width: 360, height: 740 }, // teléfono de gama baja
     deviceScaleFactor: 1,
@@ -725,7 +743,7 @@ async function main() {
         return Math.max(...mb);
       };
       const medir = async (preparar) => {
-        const ctx = await navegador.newContext({ viewport: { width: 360, height: 740 }, deviceScaleFactor: 1 });
+        const ctx = await navegador.newContext({ viewport: { width: 360, height: 740 }, deviceScaleFactor: 1, sinVideo: true });
         const p = await ctx.newPage();
         await preparar(ctx, p);
         await p.waitForTimeout(1500);
@@ -750,6 +768,11 @@ async function main() {
     });
   } finally {
     await navegador.close();
+    // Los videos se nombran por orden de aparición (video-01.webm, …) en lugar del nombre aleatorio de Playwright.
+    for (const [i, video] of videos.entries()) {
+      const destino = `${CAPTURAS}videos${sep}video-${String(i + 1).padStart(2, '0')}.webm`;
+      if (video) renameSync(await video.path(), destino);
+    }
     const fallidos = resultados.filter((r) => !r.ok).length;
     console.log(`\n${resultados.length - fallidos}/${resultados.length} pasos OK. Capturas en ${CAPTURAS}`);
     if (fallidos) process.exitCode = 1;

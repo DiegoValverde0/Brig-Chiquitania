@@ -139,6 +139,7 @@ bitácora de turno, `BRC1 B <foco> <id> <agua S|C> <combustible O|R> <herramient
 
 - **Todo junto, con evidencias:** `node scripts/evidencias.mjs` (Windows, macOS o Linux; solo Node 22 y Docker) corre
   unitarias, e2e, flujo por API, inmutabilidad RNF-07 y navegador, y deja `evidencias/RESUMEN.md` (GUIA §4.1).
+  `VER=1` muestra la ventana de Chrome durante la prueba y `VIDEO=1` la graba en video.
 - `backend/`: `npm test` (unitarias) y `npm run test:e2e` (requiere PostgreSQL; crea y vacía la BD `chiquitania_test`).
 - `frontend/pruebas/`: `npm ci && APP=http://localhost:8080 npm test` recorre la app en Chromium (sin conexión,
   cola, SMS simulado, evaluación de riesgo, panel COED con 60 focos, cartas y estados de brigada, despacho en

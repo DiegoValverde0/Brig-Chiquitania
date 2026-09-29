@@ -360,6 +360,15 @@ Opciones: `--solo e2e,navegador` repite solo esos pasos (valores: `health`, `uni
 habitual; si está en otra, definir `CHROMIUM` (PowerShell: `$env:CHROMIUM = "D:\...\chrome.exe"`). Antes del
 flujo y del navegador se aplica la semilla (las pruebas despachan brigadas).
 
+**Ver la prueba del navegador.** Con `VER=1` se abre la ventana de Chrome y cada acción se hace con una pausa
+(`VER_MS`, 400 ms por defecto); con `VIDEO=1` se graba un video por sesión (`capturas/videos/video-01.webm`, …, que
+se abren con Chrome o VLC) y queda en `evidencias/`. En PowerShell:
+
+```powershell
+$env:VER = "1"; $env:VIDEO = "1"; node scripts/evidencias.mjs --solo navegador
+Remove-Item Env:VER, Env:VIDEO      # para volver al modo normal (oculto y más rápido)
+```
+
 ### 4.2 Paso a paso (cada comando desde la raíz del repositorio)
 
 ```powershell
