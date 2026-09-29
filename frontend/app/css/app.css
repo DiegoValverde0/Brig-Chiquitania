@@ -303,3 +303,149 @@ legend {
   overflow: hidden;
   clip: rect(0 0 0 0);
 }
+
+/* ---------- Bolt 2: evaluación de riesgo del coordinador (Figura 8) ---------- */
+.pestanas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.pestanas button {
+  min-height: 44px;
+  font-size: 1rem;
+  font-weight: 600;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: #eceff1;
+  color: var(--texto);
+  cursor: pointer;
+}
+
+.pestanas button[aria-selected='true'] {
+  background: #263238;
+  border-color: #263238;
+  color: #fff;
+}
+
+.barra-acciones {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.foco-boton {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.bloque {
+  display: block;
+  margin-top: 4px;
+}
+
+.riesgo-Alto {
+  background: #ffebee;
+  color: var(--rojo-oscuro);
+  border: 1px solid #ef9a9a;
+}
+
+.riesgo-Medio {
+  background: #fff8e1;
+  color: var(--ambar);
+  border: 1px solid #f0d47a;
+}
+
+.riesgo-Bajo {
+  background: #e8f5e9;
+  color: var(--verde);
+  border: 1px solid #a5d6a7;
+}
+
+.cita {
+  margin: 4px 0 10px;
+  padding: 10px 12px;
+  background: #f8f9fa;
+  border-left: 4px solid #90a4ae;
+  font-style: italic;
+}
+
+.factores ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  color: var(--suave);
+  font-size: 0.95rem;
+}
+
+.reclasificar {
+  border-top: 1px dashed var(--borde);
+  margin-top: 14px;
+  padding-top: 6px;
+}
+
+.reclasificar h3,
+#detalle-foco h3 {
+  font-size: 1rem;
+  margin: 12px 0 4px;
+}
+
+.niveles {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.niveles label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  min-height: 44px;
+  margin: 0;
+}
+
+.niveles input {
+  width: 22px;
+  height: 22px;
+}
+
+textarea {
+  width: 100%;
+  font: inherit;
+  padding: 10px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  resize: vertical;
+}
+
+.contador {
+  float: right;
+  font-size: 0.85rem;
+}
+
+.contador.ok {
+  color: var(--verde);
+}
+
+.contador.falta {
+  color: var(--rojo-oscuro);
+}
+
+.boton-oscuro {
+  background: #111;
+  border-color: #111;
+  color: #fff;
+}
+
+.historial .reporte p {
+  margin: 2px 0;
+}

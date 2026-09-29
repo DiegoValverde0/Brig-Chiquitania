@@ -6,9 +6,10 @@ import { Brigada } from '../despacho/entities/brigada.entity';
 import { EstadoBrigada } from '../despacho/enums/estado-brigada.enum';
 import { Incidente } from '../triage/entities/incidente.entity';
 import { EstadoIncidente } from '../triage/enums/estado-incidente.enum';
-import { Rol } from '../seguridad/enums/rol.enum';
 import { HistorialEstado } from './entities/historial-estado.entity';
-import { HistorialEstadoService } from './historial-estado.service';
+import { aEntradaHistorial, EntradaHistorial, HistorialEstadoService } from './historial-estado.service';
+
+export type { EntradaHistorial };
 
 /** Línea base histórica de la temporada 2024 (PRD §2.2). */
 export const LINEA_BASE_MIN = 180;
@@ -25,15 +26,6 @@ export interface TiempoDespacho {
   cumpleMeta: boolean;
 }
 
-/** Entrada del historial para la API: quién (sin datos sensibles), cuándo y el motivo. */
-export interface EntradaHistorial {
-  id: string;
-  creadoEn: Date;
-  estadoAnterior: EstadoIncidente | null;
-  estadoNuevo: EstadoIncidente;
-  justificacion: string;
-  usuario: { id: string; nombre: string; rol: Rol } | null;
-}
 
 @Injectable()
 export class OperacionesService {
@@ -129,14 +121,7 @@ export class OperacionesService {
       relations: { usuario: true },
       order: { creadoEn: 'ASC' },
     });
-    return entradas.map((h) => ({
-      id: h.id,
-      creadoEn: h.creadoEn,
-      estadoAnterior: h.estadoAnterior,
-      estadoNuevo: h.estadoNuevo,
-      justificacion: h.justificacion,
-      usuario: h.usuario ? { id: h.usuario.id, nombre: h.usuario.nombre, rol: h.usuario.rol } : null,
-    }));
+    return entradas.map(aEntradaHistorial);
   }
 }
 

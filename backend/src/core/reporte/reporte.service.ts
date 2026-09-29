@@ -14,7 +14,9 @@ import { Incidente } from '../triage/entities/incidente.entity';
 import { EstadoIncidente } from '../triage/enums/estado-incidente.enum';
 import { NivelRiesgo } from '../triage/enums/nivel-riesgo.enum';
 import { MotorRiesgoService } from '../triage/motor-riesgo.service';
+import { OrigenRiesgo } from '../triage/enums/origen-riesgo.enum';
 import { Comunidad } from './entities/comunidad.entity';
+import { PredioPrivado } from './entities/predio-privado.entity';
 import { Rumbo } from './enums/rumbo.enum';
 import { TipoReporte } from './enums/tipo-reporte.enum';
 
@@ -122,9 +124,11 @@ export class ReporteService {
           punto = puntoDestino(base.coordenadas, GRADOS_RUMBO[solicitud.rumbo], solicitud.distanciaKm);
           referencia = ` (avistamiento: ${solicitud.distanciaKm} km al ${solicitud.rumbo} de ${base.nombre})`;
         }
+        const predios = await em.find(PredioPrivado);
         const evaluacion = this.motor.evaluar(
           punto,
           comunidades.map((c) => ({ id: c.id, nombre: c.nombre, ...c.coordenadas })),
+          predios.map((p) => ({ nombre: p.nombre, tipo: p.tipo, ...p.coordenadas })),
         );
         const incidente = em.create(Incidente, {
           id: solicitud.id,
@@ -136,6 +140,8 @@ export class ReporteService {
           distanciaEstimadaKm: solicitud.tipo === TipoReporte.Distancia ? solicitud.distanciaKm : null,
           nivelRiesgo: evaluacion.nivel,
           justificacionRiesgo: evaluacion.justificacion,
+          origenRiesgo: OrigenRiesgo.Motor,
+          factoresRiesgo: evaluacion.factores,
           comunidad: evaluacion.comunidadId ? { id: evaluacion.comunidadId } : null,
         });
         await em.insert(Incidente, incidente);

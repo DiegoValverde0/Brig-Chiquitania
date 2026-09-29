@@ -3,6 +3,8 @@ import { Comunidad } from './core/reporte/entities/comunidad.entity';
 import { ContactoComunal } from './core/reporte/entities/contacto-comunal.entity';
 import { Brigada } from './core/despacho/entities/brigada.entity';
 import { EstadoBrigada } from './core/despacho/enums/estado-brigada.enum';
+import { PredioPrivado } from './core/reporte/entities/predio-privado.entity';
+import { TipoPredio } from './core/reporte/enums/tipo-predio.enum';
 import { Rol } from './core/seguridad/enums/rol.enum';
 import { registrarUsuario } from './core/seguridad/seguridad.service';
 
@@ -28,6 +30,16 @@ export const BRIGADAS: Array<{ id: string; nombre: string; latitud: number; long
   { id: '00000000-0000-4000-8000-000000000201', nombre: 'Brigada Departamental 1', latitud: -17.7833, longitud: -63.1821 },
   { id: '00000000-0000-4000-8000-000000000202', nombre: 'Brigada Departamental 2', latitud: -17.7833, longitud: -63.1821 },
   { id: '00000000-0000-4000-8000-000000000203', nombre: 'Brigada Departamental 3', latitud: -16.3667, longitud: -60.95 },
+];
+
+/**
+ * [inferencia] Estancias FICTICIAS para ejercitar la exclusión de predios privados del motor (HU-2.1):
+ * una aislada, a más de 15 km de toda comunidad (un foco allí debe quedar Bajo), y otra cerca de Concepción
+ * (un foco allí es Alto por la comunidad, no por la estancia). Las reales se cargan con datos de campo.
+ */
+export const PREDIOS: Array<{ id: string; nombre: string; latitud: number; longitud: number }> = [
+  { id: '00000000-0000-4000-8000-000000000501', nombre: 'El Porvenir (ejemplo)', latitud: -16.55, longitud: -61.75 },
+  { id: '00000000-0000-4000-8000-000000000502', nombre: 'La Aurora (ejemplo)', latitud: -16.1, longitud: -62.0 },
 ];
 
 /**
@@ -70,6 +82,14 @@ export async function aplicarSemilla(ds: DataSource): Promise<void> {
         nombre: b.nombre,
         estadoOperativo: EstadoBrigada.Disponible,
         ubicacionActual: { latitud: b.latitud, longitud: b.longitud, precisionMetros: null },
+      });
+    }
+    for (const p of PREDIOS) {
+      await em.save(PredioPrivado, {
+        id: p.id,
+        nombre: p.nombre,
+        tipo: TipoPredio.Estancia,
+        coordenadas: { latitud: p.latitud, longitud: p.longitud, precisionMetros: null },
       });
     }
   });

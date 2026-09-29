@@ -26,12 +26,62 @@
   <main id="vista-principal" class="vista" hidden>
     <header class="barra">
       <div>
-        <h1>Reportar foco de calor</h1>
+        <h1 id="titulo">Reportar foco de calor</h1>
         <p id="usuario" class="nota"></p>
       </div>
       <span id="estado-red" class="insignia" aria-live="polite"></span>
     </header>
 
+    <!-- Pestañas por rol: el coordinador también evalúa el riesgo (CU-02). -->
+    <nav id="pestanas" class="pestanas" role="tablist" hidden>
+      <button type="button" role="tab" id="tab-reportar" aria-selected="true" aria-controls="panel-reportar">Reportar</button>
+      <button type="button" role="tab" id="tab-evaluacion" aria-selected="false" aria-controls="panel-evaluacion">Evaluación de riesgo</button>
+    </nav>
+
+    <!-- CU-02 (Figura 8): evaluación y reclasificación del riesgo, solo coordinador (HU-2.1, HU-2.2) -->
+    <section id="panel-evaluacion" role="tabpanel" hidden>
+      <div class="barra-acciones">
+        <h2>Focos activos</h2>
+        <button type="button" id="actualizar-focos" class="enlace">↻ Actualizar</button>
+      </div>
+      <p id="error-evaluacion" class="error" role="alert"></p>
+      <ul id="lista-focos" class="lista"></ul>
+
+      <article id="detalle-foco" class="tarjeta" hidden>
+        <div class="barra-acciones">
+          <h2 id="detalle-titulo"></h2>
+          <button type="button" id="cerrar-detalle" class="enlace">Volver a la lista</button>
+        </div>
+        <p>Riesgo vigente: <span id="detalle-nivel" class="insignia"></span> <span id="detalle-origen" class="nota"></span></p>
+        <p id="detalle-distancia"></p>
+        <p class="nota">Justificación del algoritmo:</p>
+        <blockquote id="detalle-justificacion" class="cita"></blockquote>
+        <details class="factores">
+          <summary>Factores evaluados por el motor</summary>
+          <ul id="detalle-factores"></ul>
+        </details>
+
+        <form id="form-reclasificar" class="reclasificar" novalidate>
+          <h3>Reclasificar manualmente</h3>
+          <fieldset class="niveles">
+            <legend>Nuevo nivel</legend>
+            <label><input type="radio" name="nivel" value="Alto"> Alto</label>
+            <label><input type="radio" name="nivel" value="Medio"> Medio</label>
+            <label><input type="radio" name="nivel" value="Bajo"> Bajo</label>
+          </fieldset>
+          <label for="justificacion">Justificación (obligatoria, mínimo 15 caracteres)
+            <span id="contador" class="contador">0/15 car.</span></label>
+          <textarea id="justificacion" rows="3" maxlength="500" placeholder="Ej.: Foco en pastizal, lejos de vivienda…"></textarea>
+          <button type="submit" id="guardar-reclasificacion" class="boton boton-oscuro" disabled>GUARDAR RECLASIFICACIÓN</button>
+          <p id="mensaje-reclasificacion" class="nota" role="status"></p>
+        </form>
+
+        <h3>Historial de reclasificaciones</h3>
+        <ul id="detalle-historial" class="lista historial"></ul>
+      </article>
+    </section>
+
+    <div id="panel-reportar" role="tabpanel">
     <!-- CU-01: reporte georreferenciado, sin mapas (RF-01, RS-01) -->
     <form id="form-reporte" class="tarjeta" novalidate>
       <fieldset class="modos">
@@ -82,6 +132,7 @@
       <h2>Mis reportes</h2>
       <ul id="lista-reportes" class="lista"></ul>
     </section>
+    </div>
 
     <details class="tarjeta ajustes">
       <summary>Ajustes</summary>
@@ -116,6 +167,7 @@
   <script src="js/api.js"></script>
   <script src="js/foto.js"></script>
   <script src="js/sync.js"></script>
+  <script src="js/evaluacion.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

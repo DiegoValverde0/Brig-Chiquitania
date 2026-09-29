@@ -1,7 +1,8 @@
 # Plan del Bolt 2 — Release 0.3: Motor de riesgo y gobernanza algorítmica
 
-> Propuesta de la IA para aprobación del PO (AI-DLC: "la IA propone, el humano aprueba"). Nada de esto se
-> implementa hasta que el PO lo apruebe y resuelva las decisiones de la sección 6.
+> Propuesta de la IA para aprobación del PO (AI-DLC: "la IA propone, el humano aprueba").
+> **Aprobado por el PO el 29/09/2026** con las propuestas de la sección 6: Medio = 5–15 km, bioma diferido,
+> datos de ejemplo hasta contar con coordenadas reales, e inicio del Bolt 2 sin esperar el cierre del Bolt 1.
 
 ## 1. Alcance según el Release Plan y la SRS
 

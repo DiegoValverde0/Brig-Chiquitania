@@ -4,10 +4,11 @@ Skill específica para el agente de UI (frontend). Complementa (no reemplaza) `/
 Por decisión del PO (29/09/2026), **Claude mantiene el frontend temporalmente**; estas reglas valen para
 cualquier agente que lo tome.
 
-## Estado actual (Bolt 1)
+## Estado actual (Bolts 1 y 2)
 `frontend/app/`: app web instalable (PWA) del **CU-01 "Reportar foco de calor"** para el Guardaparque/Comunario,
-según el wireframe de la Actividad 3 (Figura 7). Las pantallas web del coordinador (CU-02 a CU-05) llegan en los
-bolts siguientes.
+según el wireframe de la Actividad 3 (Figura 7), y desde el Bolt 2 la pestaña **"Evaluación de riesgo"** del
+Coordinador (CU-02, Figura 8), visible solo para ese rol. Las demás pantallas del coordinador llegan en los bolts
+siguientes.
 
 ```
 frontend/
@@ -20,6 +21,7 @@ frontend/
 │   ├── js/api.js         # fetch con token y tiempo límite
 │   ├── js/foto.js        # compresión en el teléfono a ≤100 KB
 │   ├── js/sync.js        # cola offline-first idempotente y catálogo comunal
+│   ├── js/evaluacion.js  # pestaña "Evaluación de riesgo" del coordinador (CU-02, Figura 8; Bolt 2)
 │   ├── js/app.js         # interfaz
 │   └── sw.js             # service worker: la app abre sin red (subir VERSION al cambiar archivos)
 ├── nginx.conf            # sirve app/ y pasa /api al backend

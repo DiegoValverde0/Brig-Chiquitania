@@ -63,6 +63,7 @@ export class DespachoService {
         columnas[i.estado].push({
           id: i.id,
           nivelRiesgo: i.nivelRiesgo,
+          origenRiesgo: i.origenRiesgo,
           justificacionRiesgo: i.justificacionRiesgo,
           fechaReporte: i.fechaReporte,
           coordenada: i.coordenada,

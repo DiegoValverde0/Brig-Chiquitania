@@ -1,7 +1,8 @@
 # Guía de despliegue en desarrollo y pruebas
 
 Pasos para levantar el MVP en una máquina de desarrollo con Docker, cargar datos de ejemplo y verificar todo
-lo construido hasta el **Bolt 1** (Walking Skeleton + captura resiliente y contacto comunal).
+lo construido hasta el **Bolt 2** (Walking Skeleton, captura resiliente y contacto comunal, motor de riesgo y
+gobernanza algorítmica).
 
 > Todos los comandos se ejecutan desde la raíz del repositorio, salvo que se indique otra carpeta.
 > En Windows, usar PowerShell o Git Bash; los comandos `curl` de ejemplo están escritos para Bash.
@@ -67,6 +68,7 @@ docker compose exec api node dist/seed
 Crea (es idempotente, se puede ejecutar varias veces):
 - 7 comunidades de la Chiquitanía con su referente comunal (datos ficticios, coordenadas aproximadas).
 - 3 brigadas (dos en Santa Cruz de la Sierra, una en San Ignacio de Velasco), todas **Disponibles**.
+- 2 estancias **ficticias** para probar la exclusión de predios privados del motor de riesgo (Bolt 2).
 - 4 usuarios demo, uno por rol. **Sus códigos son públicos: solo para desarrollo.**
 
 | Rol | Código de acceso |
@@ -171,6 +173,35 @@ docker compose exec db psql -U chiquitania -d chiquitania_db \
 # Los valores deben verse como v1:xxxx:yyyy:zzzz (cifrados), no en claro.
 ```
 
+### 3.6 Evaluación y reclasificación del riesgo (Bolt 2)
+
+1. Como guardaparque, enviar un reporte **a distancia**: comunidad *Concepción*, rumbo *Norte*, `10` km.
+   Debe quedar con riesgo **Medio** ("Comunidad habitada en el área de influencia…").
+2. Cerrar sesión (**Ajustes → Cerrar sesión**) e ingresar con `demo-coordinador`. Aparecen las pestañas
+   **Reportar** y **Evaluación de riesgo** (el guardaparque no las ve).
+3. En **Evaluación de riesgo**, abrir el foco. Se ven:
+   - el riesgo vigente;
+   - la distancia a la comunidad;
+   - la justificación del algoritmo;
+   - en *Factores evaluados por el motor*: la regla aplicada, los umbrales (Alto <5 km, Medio <15 km), las
+     estancias excluidas y la versión del motor.
+4. Elegir **Alto** y escribir una justificación de 14 caracteres: el contador marca `14/15 car.` y el botón
+   **GUARDAR RECLASIFICACIÓN** sigue desactivado (DoD 3). Con 15 o más caracteres se activa. Al guardar, el
+   riesgo pasa a Alto "(reclasificado manualmente)" y el **historial** muestra quién, cuándo, niveles y motivo.
+
+Exclusión de estancias (DoD 2), por API: un foco junto a la estancia de ejemplo *El Porvenir*, lejos de toda
+comunidad, queda **Bajo** y lo explica:
+
+```bash
+G="Authorization: Bearer demo-guardaparque"
+curl -X POST http://localhost:3000/api/incidentes -H "$G" -H 'Content-Type: application/json' \
+  -d "{\"id\":\"$(node -e 'console.log(crypto.randomUUID())')\",\"latitud\":-16.547,\"longitud\":-61.75,\"precisionMetros\":5}"
+# "nivelRiesgo":"Bajo", "justificacionRiesgo":"Sin comunidad habitada a menos de 15 km (…). Excluido de la
+#  priorización automática: Estancia El Porvenir (ejemplo) a 0.33 km"
+```
+
+Cargar estancias reales (coordinador): `POST /api/predios-privados` con `{"nombre":"…","latitud":…,"longitud":…}`.
+
 ---
 
 ## 4. Pruebas automatizadas
@@ -189,7 +220,7 @@ npm run test:e2e                 # flujo Bolt 0 + captura Bolt 1 contra PostgreS
 cd ..
 ```
 
-Resultado esperado al cierre del Bolt 1: **26 unitarias** y **34 e2e** en verde.
+Resultado esperado al cierre del Bolt 2: **30 unitarias** y **45 e2e** en verde.
 
 ### 4.2 App web en el navegador (Playwright)
 
@@ -207,8 +238,8 @@ APP=http://localhost:8080 npm test
 cd ../..
 ```
 
-Resultado esperado: **7/7 pasos OK** (inicio de sesión, reporte GPS con foto, cola sin conexión, recarga sin
-red, sincronización, SMS simulado y memoria). Las capturas quedan en `frontend/pruebas/capturas/`.
+Resultado esperado: **8/8 pasos OK** (inicio de sesión, reporte GPS con foto, cola sin conexión, recarga sin
+red, sincronización, SMS simulado, evaluación y reclasificación del coordinador, y memoria). Las capturas quedan en `frontend/pruebas/capturas/`.
 
 ### 4.3 Desarrollo de la API sin Docker (opcional)
 

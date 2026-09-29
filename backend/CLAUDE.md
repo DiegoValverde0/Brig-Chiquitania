@@ -79,7 +79,11 @@ node dist/crear-usuario "Nombre" Coordinador   # alta por consola; imprime el to
   `HistorialEstadoService` (única vía de escritura).
 - Guardas de despacho: riesgo Alto/Medio, `CartaMunicipal` no rechazada (Ley 602), `ContactoComunal` no vacío,
   incidente en "Nuevo" y brigada "Disponible" (UPDATE condicional contra doble despacho).
-- Motor de riesgo (`MotorRiesgoService`): regla única <5 km ⇒ Alto, si no Bajo; asocia la comunidad más cercana.
+- Motor de riesgo (`MotorRiesgoService`, `motor-v2` desde el Bolt 2): comunidad habitada <5 km ⇒ Alto (texto
+  exacto "Amenaza directa a vida humana comunitaria"), 5–15 km ⇒ Medio (umbral aprobado por el PO), ≥15 km ⇒ Bajo.
+  Los `PredioPrivado` (estancias) solo se listan como excluidos; nunca elevan el nivel. Devuelve `factores`
+  (versión, regla, umbrales, comunidad, predios excluidos, ms) que se guardan en `incidente.factores_riesgo`.
+  Función pura: cualquier cambio de reglas sube `VERSION_MOTOR` y pasa por revisión del PO.
 - Fechas de reporte y llegada: opcionales desde el cliente (captura offline), nunca en el futuro.
 - Ojo con TypeORM: `select` parcial sobre una columna embebida (`coordenadas: true`) devuelve el objeto vacío;
   cargar la entidad completa.
@@ -108,6 +112,14 @@ Bolt 1 (captura resiliente):
 - `ContactoComunal`: nombre y teléfono cifrados. `MensajeSms` (nueva, `core.sync`): bitácora de SMS con número
   y texto cifrados.
 
+Bolt 2 (motor de riesgo y gobernanza algorítmica):
+- `Incidente`: `origenRiesgo` (Motor | Manual) y `factoresRiesgo` (jsonb, RF-05). `justificacionRiesgo` guarda
+  siempre la explicación del motor; la justificación humana vive en el historial.
+- `HistorialEstado`: `tipoEvento` (CambioEstado | Reclasificacion), `nivelAnterior`, `nivelNuevo`. Reclasificar
+  (`EvaluacionService.reclasificar`) usa `HistorialEstadoService.registrarReclasificacion`, con bloqueo de fila;
+  justificación de 15 a 500 caracteres (tras quitar espacios), solo Coordinador, nunca sobre un incidente Cerrado.
+- `PredioPrivado` (nueva, `core.reporte`, [inferencia]): catálogo de estancias, en claro como las comunidades.
+
 Pendiente para bolts posteriores:
 
 | Tema | UML / SRS oficial | Implementado | Bolt |
@@ -115,7 +127,7 @@ Pendiente para bolts posteriores:
 | `Bitacora` | fecha, nivelAgua, nivelCombustible, herramientasOperativas, kmFajaMitigados, porcentajeControl; 0..* por Incidente | fechaHora, descripcion (texto libre) ligada a AsignacionDespacho | 5 |
 | `InformeConsolidado` | fechaGeneracion, contenidoPDF, tiempoTotalDespacho, justificacionFalsoPositivo; 0..1 por Incidente | resumen, fechaCierre, hectareasAfectadas; ligado a AsignacionDespacho | 5 |
 | `Notificacion` | canal, contenido, estadoEnvio; 1..* por AsignacionDespacho (Web Push / SMS al jefe de brigada) | — (la pasarela SMS ya existe) | 4 |
-| Exclusión de estancias y umbral "Medio" | Motor de riesgo completo con explicabilidad | Regla única <5 km | 2 |
+| Bioma como factor de riesgo | RTM original: "distancia a población y bioma" | Diferido por el PO (sin datos de bioma) | — |
 | Migraciones | Esquema versionado antes del piloto | `synchronize` | 1.0 |
 
 Datos semilla (comunidades con contacto y brigadas, coordenadas aproximadas y contactos ficticios):
