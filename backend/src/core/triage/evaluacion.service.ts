@@ -36,6 +36,9 @@ export interface EvaluacionIncidente {
   reclasificaciones: EntradaHistorial[];
   /** Trámite municipal (Ley 602, Bolt 3): para validarla o rechazarla desde el mismo detalle. */
   carta: VistaCarta | null;
+  /** Bolt 4: última reactivación (foco controlado que volvió a ser riesgoso) y cuántas veces ocurrió. */
+  reactivadoEn: Date | null;
+  reactivaciones: number;
 }
 
 @Injectable()
@@ -71,7 +74,40 @@ export class EvaluacionService {
       },
       reclasificaciones: reclasificaciones.map(aEntradaHistorial),
       carta: i.cartaMunicipal ? vistaCarta(i.cartaMunicipal) : null,
+      reactivadoEn: i.reactivadoEn,
+      reactivaciones: i.reactivaciones,
     };
+  }
+
+  /**
+   * Bolt 4 (decisión 7.2 del PO): un foco controlado ("En Liquidación") vuelve a ser riesgoso. Solo el
+   * coordinador lo reactiva, con justificación (≥15 caracteres): vuelve a "Nuevo" con riesgo Alto y encabeza el
+   * panel. La brigada que lo liquidaba no cambia de estado; queda como candidata a la reasignación táctica.
+   */
+  async reactivar(incidenteId: string, body: unknown, usuarioId: string): Promise<EvaluacionIncidente> {
+    const justificacion = exigirJustificacion(exigirObjeto(body).justificacion);
+    await this.dataSource.transaction(async (em) => {
+      const incidente = await em.findOne(Incidente, { where: { id: incidenteId }, lock: { mode: 'pessimistic_write' } });
+      if (!incidente) throw new NotFoundException('Incidente no encontrado');
+      if (incidente.estado !== EstadoIncidente.En_Liquidacion) {
+        throw new ConflictException(
+          `El incidente está "${incidente.estado}": solo se reactiva un foco controlado ("En_Liquidacion")`,
+        );
+      }
+      await em.update(
+        Incidente,
+        { id: incidenteId },
+        {
+          estado: EstadoIncidente.Nuevo,
+          nivelRiesgo: NivelRiesgo.Alto,
+          origenRiesgo: OrigenRiesgo.Manual,
+          reactivadoEn: () => 'now()',
+          reactivaciones: () => 'reactivaciones + 1',
+        },
+      );
+      await this.historial.registrarReactivacion(em, incidente, justificacion, usuarioId);
+    });
+    return this.evaluacion(incidenteId);
   }
 
   /**
@@ -82,15 +118,7 @@ export class EvaluacionService {
   async reclasificar(incidenteId: string, body: unknown, usuarioId: string): Promise<EvaluacionIncidente> {
     const datos = exigirObjeto(body);
     const nivelNuevo = exigirEnum(datos.nivelRiesgo, 'nivelRiesgo', Object.values(NivelRiesgo));
-    const justificacion = typeof datos.justificacion === 'string' ? datos.justificacion.trim() : '';
-    if (justificacion.length < JUSTIFICACION_MINIMA) {
-      throw new BadRequestException(
-        `La justificación es obligatoria y debe tener al menos ${JUSTIFICACION_MINIMA} caracteres (tiene ${justificacion.length})`,
-      );
-    }
-    if (justificacion.length > JUSTIFICACION_MAXIMA) {
-      throw new BadRequestException(`La justificación no puede superar los ${JUSTIFICACION_MAXIMA} caracteres`);
-    }
+    const justificacion = exigirJustificacion(datos.justificacion);
 
     await this.dataSource.transaction(async (em) => {
       const incidente = await em.findOne(Incidente, {
@@ -116,4 +144,18 @@ export class EvaluacionService {
     });
     return this.evaluacion(incidenteId);
   }
+}
+
+/** Justificación humana obligatoria (RS-03): de 15 a 500 caracteres tras quitar espacios. */
+function exigirJustificacion(valor: unknown): string {
+  const justificacion = typeof valor === 'string' ? valor.trim() : '';
+  if (justificacion.length < JUSTIFICACION_MINIMA) {
+    throw new BadRequestException(
+      `La justificación es obligatoria y debe tener al menos ${JUSTIFICACION_MINIMA} caracteres (tiene ${justificacion.length})`,
+    );
+  }
+  if (justificacion.length > JUSTIFICACION_MAXIMA) {
+    throw new BadRequestException(`La justificación no puede superar los ${JUSTIFICACION_MAXIMA} caracteres`);
+  }
+  return justificacion;
 }

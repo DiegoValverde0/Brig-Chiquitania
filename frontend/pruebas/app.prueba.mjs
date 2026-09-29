@@ -10,6 +10,8 @@
  * Bolt 2: evaluación y reclasificación del riesgo. Bolt 3: panel COED con 60 focos simulados (filtros de carta,
  * contadores, 4 estados de brigada, mapa esquemático), carta de la UGR → validación/rechazo del coordinador y
  * reporte "En Liquidación" del jefe de brigada; capturas a 1366 px y 360 px.
+ * Bolt 4: despacho en 1 clic desde el panel (doble clic → una sola asignación), aviso al jefe (SMS simulado),
+ * orden de salida en "Mi brigada" (leída) con llegada por GPS, y reactivación → reasignación táctica en 1 clic.
  */
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
@@ -93,6 +95,13 @@ const COMUNIDADES = [
   { nombre: 'Roboré', latitud: -18.3308, longitud: -59.7594 },
 ];
 const BRIGADA = (n) => `00000000-0000-4000-8000-00000000020${n}`;
+/** Jefe demo de cada brigada (semilla del Bolt 4). */
+const JEFE_DE = {
+  [BRIGADA(1)]: 'demo-jefe-1',
+  [BRIGADA(2)]: 'demo-jefe-2',
+  [BRIGADA(3)]: 'demo-jefe-brigada',
+  [BRIGADA(4)]: 'demo-jefe-4',
+};
 const pdf = (etiqueta) => Buffer.from(`%PDF-1.4\n% Carta municipal de prueba ${etiqueta}\n%%EOF\n`);
 
 /** Crea un foco a `km` al norte de la comunidad y, si se pide, le adjunta una carta (UGR). */
@@ -127,8 +136,8 @@ async function despachar(foco, brigada, llegar) {
   }
 }
 
-async function entrarComo(navegador, token, viewport) {
-  const ctx = await navegador.newContext({ viewport, deviceScaleFactor: 1, locale: 'es-BO' });
+async function entrarComo(navegador, token, viewport, extra = {}) {
+  const ctx = await navegador.newContext({ viewport, deviceScaleFactor: 1, locale: 'es-BO', ...extra });
   const p = await ctx.newPage();
   p.on('pageerror', (e) => console.log(`    [error de la página] ${e.message}`));
   p.on('dialog', (d) => d.accept());
@@ -295,7 +304,7 @@ async function main() {
       const item = p.locator(`#lista-focos li[data-id="${id}"]`);
       await item.waitFor();
       assert.match(await item.textContent(), /Medio/);
-      await item.locator('button').click();
+      await item.locator('.foco-boton').click();
       await p.locator('#detalle-foco').waitFor();
       assert.match(await p.textContent('#detalle-justificacion'), /Comunidad habitada en el área de influencia: Concepción/);
       assert.match(await p.textContent('#detalle-distancia'), /Distancia a comunidad: 10 km \(Concepción\)/);
@@ -422,7 +431,7 @@ async function main() {
       await esperarResumen((await api('/panel')).datos.resumen.visibles);
 
       // CU-08: el coordinador abre la tarjeta, ve la carta y la valida → [Con carta].
-      await (await tarjetaDelPanel(p, focoUgr.id)).locator('button').click();
+      await (await tarjetaDelPanel(p, focoUgr.id)).locator('.foco-boton').click();
       await p.locator('#detalle-foco').waitFor();
       assert.equal(await p.textContent('#titulo'), 'Evaluación de riesgo');
       await p.locator('#carta-estado', { hasText: 'Por validar' }).waitFor();
@@ -442,7 +451,7 @@ async function main() {
       const otro = focos.filter((_, i) => i % 3 === 0)[5];
       await p.check('input[name="carta"][value=""]');
       await esperarResumen((await api('/panel')).datos.resumen.visibles);
-      await (await tarjetaDelPanel(p, otro.id)).locator('button').click();
+      await (await tarjetaDelPanel(p, otro.id)).locator('.foco-boton').click();
       await p.locator('#carta-estado', { hasText: 'Por validar' }).waitFor();
       await p.fill('#motivo-rechazo', 'Falta la firma');
       assert.ok(await p.locator('#rechazar-carta').isDisabled(), 'rechazo bloqueado con 14 caracteres');
@@ -466,6 +475,101 @@ async function main() {
       await p.locator('#kanban .tarjeta-foco').first().waitFor();
       assert.ok(await sinDesbordeHorizontal(p), 'sin desplazamiento horizontal a 360 px');
       await p.screenshot({ path: `${CAPTURAS}11-panel-coed-360.png`, fullPage: false });
+      await ctx.close();
+    });
+
+    // ---------------- Bolt 4: despacho en 1 clic, orden de salida, reactivación y reasignación ----------------
+    let despachado;
+    await paso('RF-10: despacho en 1 clic desde el panel; el doble clic no duplica la asignación', async () => {
+      despachado = await focoSimulado(1, 2, true); // San Javier, 2 km: Alto, con carta
+      const { ctx, p } = await entrarComo(navegador, 'demo-coordinador', { width: 1366, height: 900 });
+      await p.click('#tab-panel');
+      const t = await tarjetaDelPanel(p, despachado.id);
+      const boton = t.locator('.despachar');
+      assert.ok(await boton.isEnabled(), 'DESPACHAR habilitado: carta, contacto y brigada con jefe');
+      assert.match(await boton.textContent(), /^DESPACHAR B\d · [\d.]+ km$/);
+      await p.screenshot({ path: `${CAPTURAS}12-panel-despachar.png`, fullPage: false });
+      await boton.dblclick();
+      await p.locator(`#kanban .columna[data-columna="Asignado"] .tarjeta-foco[data-id="${despachado.id}"]`).waitFor();
+      const historial = (await api(`/incidentes/${despachado.id}/historial`)).datos;
+      assert.equal(historial.filter((h) => h.estadoNuevo === 'Asignado').length, 1, 'una sola asignación');
+      despachado.brigada = (await api('/brigadas')).datos.find((b) => b.incidente && b.incidente.id === despachado.id);
+      assert.ok(despachado.brigada, 'la brigada quedó vinculada al foco');
+      // Sin suscripción push en el navegador del jefe: sale el SMS (pasarela simulada) y el panel lo muestra.
+      await p.click('#actualizar-panel');
+      await p.locator(`.tarjeta-foco[data-id="${despachado.id}"] .aviso[data-aviso="Enviada"]`).waitFor();
+      const sms = (await api('/sms/mensajes')).datos.find((m) => m.texto.startsWith(`DESPACHO F-${despachado.id.slice(0, 8)}`));
+      assert.ok(sms && sms.texto.length <= 160 && /Ref: Referente de ejemplo San Javier/.test(sms.texto), 'SMS de despacho ≤160');
+      await ctx.close();
+    });
+
+    await paso('HU-4.2: el jefe ve la orden de salida (acuse de recibo) y confirma la llegada con GPS', async () => {
+      const punto = { latitude: -16.2747 + 2 / 111.195, longitude: -62.5064, accuracy: 10 };
+      const { ctx, p } = await entrarComo(navegador, JEFE_DE[despachado.brigada.id], { width: 360, height: 740 }, {
+        permissions: ['geolocation'],
+        geolocation: punto,
+      });
+      await p.click('#tab-brigada');
+      await p.locator('#orden-salida').waitFor();
+      assert.match(await p.textContent('#orden-foco'), new RegExp(`FOCO-${despachado.id.slice(0, 8)} · riesgo Alto · San Javier`));
+      assert.match(await p.textContent('#orden-ruta'), /Ruta en línea recta: [\d.]+ km al (N|NE|E|SE|S|SO|O|NO) desde/);
+      assert.match(await p.getAttribute('#orden-llamar', 'href'), /^tel:\+591/);
+      await p.locator('#estado-push', { hasText: 'SMS' }).waitFor(); // Chromium de pruebas sin servicio de push
+      await p.screenshot({ path: `${CAPTURAS}13-orden-salida.png`, fullPage: true });
+      // Acuse de recibo: el panel del coordinador lo ve como leída.
+      for (let i = 0; i < 40; i++) {
+        const t = (await api('/panel')).datos.incidentes.Asignado.find((x) => x.id === despachado.id);
+        if (t && t.notificacion && t.notificacion.leida) break;
+        await p.waitForTimeout(100);
+        if (i === 39) assert.fail('la orden no quedó leída');
+      }
+      await p.click('#confirmar-llegada');
+      await p.locator('#mensaje-llegada', { hasText: '✔ Llegada confirmada' }).waitFor();
+      await p.locator('#estado-mi-brigada', { hasText: 'En combate activo' }).waitFor();
+      assert.ok(await p.locator('#confirmar-llegada').isHidden(), 'la llegada no se confirma dos veces');
+      // Termina el combate: la brigada reporta En Liquidación (su foco queda controlado).
+      await p.click('#reportar-liquidacion');
+      await p.locator('#estado-mi-brigada', { hasText: 'En liquidación' }).waitFor();
+      await ctx.close();
+    });
+
+    await paso('Decisión 7.2 + HU-4.3: el foco controlado se reactiva y la brigada que lo liquidaba se reasigna en 1 clic', async () => {
+      // Un reporte nuevo a 1 km del foco controlado: el panel avisa "posible reactivación" (no cambia nada solo).
+      const alta = await llamar('POST', '/incidentes', 'demo-guardaparque', {
+        id: crypto.randomUUID(),
+        latitud: -16.2747 + 2.9 / 111.195,
+        longitud: -62.5064,
+        precisionMetros: 8,
+      });
+      assert.equal(alta.estado, 201);
+      assert.ok(alta.datos.posibleReactivacion.some((x) => x.id === despachado.id), 'el reporte avisa la posible reactivación');
+
+      const { ctx, p } = await entrarComo(navegador, 'demo-coordinador', { width: 1366, height: 900 });
+      await p.click('#tab-panel');
+      const controlada = p.locator(`#kanban .columna[data-columna="En_Liquidacion"] .tarjeta-foco[data-id="${despachado.id}"]`);
+      await controlada.locator('.posible-reactivacion').waitFor();
+      await controlada.locator('.foco-boton').click();
+      await p.locator('#detalle-reactivar').waitFor();
+      await p.fill('#justificacion-reactivar', 'Rebrote fuerte');
+      assert.ok(await p.locator('#reactivar-foco').isDisabled(), 'reactivar bloqueado con 14 caracteres');
+      await p.fill('#justificacion-reactivar', 'Rebrote fuerte con viento hacia San Javier');
+      await p.click('#reactivar-foco');
+      await p.locator('#detalle-reactivado', { hasText: 'Foco reactivado' }).waitFor();
+      assert.equal(await p.textContent('#detalle-nivel'), 'Alto');
+
+      await p.click('#tab-panel');
+      const primera = p.locator('#kanban .columna[data-columna="Nuevo"] .tarjeta-foco').first();
+      await p.locator(`#kanban .columna[data-columna="Nuevo"] .tarjeta-foco[data-id="${despachado.id}"] .reactivado`).waitFor();
+      assert.equal(await primera.getAttribute('data-id'), despachado.id, 'el reactivado encabeza la columna Nuevo');
+      const reasignar = primera.locator('.despachar');
+      assert.match(await reasignar.textContent(), /^~ REASIGNAR B\d · [\d.]+ km$/);
+      await p.screenshot({ path: `${CAPTURAS}14-reactivado-reasignar.png`, fullPage: false });
+      await reasignar.click();
+      await p.locator(`#kanban .columna[data-columna="Asignado"] .tarjeta-foco[data-id="${despachado.id}"]`).waitFor();
+      const historial = (await api(`/incidentes/${despachado.id}/historial`)).datos;
+      assert.equal(historial.at(-2).tipoEvento, 'Reactivacion');
+      assert.match(historial.at(-1).justificacion, /Reasignación táctica confirmada por el coordinador/);
+      await p.screenshot({ path: `${CAPTURAS}15-reasignado.png`, fullPage: false });
       await ctx.close();
     });
 

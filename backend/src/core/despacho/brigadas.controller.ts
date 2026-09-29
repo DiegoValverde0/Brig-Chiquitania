@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
 import { Roles, UsuarioActual } from '../seguridad/decoradores';
 import { Usuario } from '../seguridad/entities/usuario.entity';
 import { Rol } from '../seguridad/enums/rol.enum';
@@ -15,9 +15,20 @@ export class BrigadasController {
     return this.brigadas.listar();
   }
 
+  /** `{ "usuarioId": "…" }`: jefe de la brigada (Jefe de Brigada activo; necesita teléfono para el despacho). */
+  @Put(':id/jefe')
+  @Roles(Rol.Coordinador)
+  asignarJefe(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: unknown,
+    @UsuarioActual() usuario: Usuario,
+  ): Promise<VistaBrigada> {
+    return this.brigadas.asignarJefe(id, body, usuario.id);
+  }
+
   @Get('mia')
   @Roles(Rol.JefeBrigada)
-  mia(@UsuarioActual() usuario: Usuario): Promise<VistaBrigada> {
+  mia(@UsuarioActual() usuario: Usuario) {
     return this.brigadas.mia(usuario);
   }
 

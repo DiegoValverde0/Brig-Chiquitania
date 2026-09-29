@@ -13,12 +13,17 @@ export const TOKENS = {
   coordinador: 'demo-coordinador',
   jefeBrigada: 'demo-jefe-brigada',
   ugr: 'demo-ugr',
+  /** Bolt 4: jefes demo de las brigadas 1, 2 y 4 (la 3 es de `jefeBrigada`). */
+  jefe1: 'demo-jefe-1',
+  jefe2: 'demo-jefe-2',
+  jefe4: 'demo-jefe-4',
 } as const;
 
 export type Cliente = {
   get: (url: string) => request.Test;
   post: (url: string) => request.Test;
   put: (url: string) => request.Test;
+  delete: (url: string) => request.Test;
 };
 
 export interface AppPruebas {
@@ -44,6 +49,7 @@ export async function crearAppPruebas(): Promise<AppPruebas> {
       get: (url) => conToken(servidor().get(url)),
       post: (url) => conToken(servidor().post(url)),
       put: (url) => conToken(servidor().put(url)),
+      delete: (url) => conToken(servidor().delete(url)),
     };
   };
   return { app, ds, como };
@@ -67,4 +73,14 @@ export function subirCarta(
     .set('Content-Type', tipo)
     .set('x-fecha-emision', fechaEmision)
     .send(archivo);
+}
+
+/** Espera (sondeo) a que se cumpla una condición asíncrona: la notificación sale después de responder el despacho. */
+export async function esperar<T>(leer: () => Promise<T>, cumple: (v: T) => boolean, ms = 5000): Promise<T> {
+  const fin = Date.now() + ms;
+  for (;;) {
+    const v = await leer();
+    if (cumple(v) || Date.now() > fin) return v;
+    await new Promise((r) => setTimeout(r, 50));
+  }
 }

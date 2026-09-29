@@ -2,8 +2,9 @@
  * Service worker: la app abre sin red (offline-first). Solo se precachea la "cáscara" estática; la API nunca
  * se cachea (los datos viven en IndexedDB y los maneja la cola de sincronización).
  * Subir VERSION al cambiar cualquier archivo de la lista.
+ * Bolt 4: recibe el Web Push de la orden de salida (RF-11) y al tocarlo abre "Mi brigada".
  */
-var VERSION = 'brc-app-v3';
+var VERSION = 'brc-app-v4';
 var CASCARA = [
   './',
   'index.html',
@@ -74,5 +75,42 @@ self.addEventListener('fetch', function (evento) {
         });
       },
     ),
+  );
+});
+
+// ---------- Web Push: orden de salida para el jefe de brigada (HU-4.2, RF-11) ----------
+
+self.addEventListener('push', function (evento) {
+  var datos = {};
+  try {
+    datos = evento.data ? evento.data.json() : {};
+  } catch (e) {
+    datos = { titulo: 'Despacho', cuerpo: evento.data ? evento.data.text() : '' };
+  }
+  evento.waitUntil(
+    self.registration.showNotification(datos.titulo || 'Orden de despacho', {
+      body: datos.cuerpo || 'Abra la app para ver la orden de salida',
+      icon: 'icono.svg',
+      badge: 'icono.svg',
+      tag: datos.asignacionId || 'despacho',
+      requireInteraction: true,
+      data: { url: datos.url || './?pestana=brigada' },
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', function (evento) {
+  evento.notification.close();
+  var url = new URL((evento.notification.data && evento.notification.data.url) || './?pestana=brigada', self.registration.scope).href;
+  evento.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (ventanas) {
+      for (var i = 0; i < ventanas.length; i++) {
+        if ('focus' in ventanas[i]) {
+          ventanas[i].navigate(url);
+          return ventanas[i].focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    }),
   );
 });

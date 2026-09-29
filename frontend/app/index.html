@@ -103,6 +103,19 @@
       <article id="mi-brigada" class="tarjeta">
         <p class="nota">Cargando…</p>
       </article>
+      <!-- HU-4.2: orden de salida (coordenadas, ruta en línea recta, contacto comunal, cronómetro) -->
+      <article id="orden-salida" class="tarjeta orden" hidden>
+        <h2>Orden de salida</h2>
+        <p id="orden-foco"></p>
+        <p class="lectura" id="orden-coordenadas"></p>
+        <p id="orden-ruta"></p>
+        <p id="orden-contacto" class="destacado"></p>
+        <a id="orden-llamar" class="boton">📞 Llamar al referente comunal</a>
+        <p class="nota">Asignada hace <strong id="orden-cronometro">—</strong> · <span id="orden-aviso"></span></p>
+        <button type="button" id="confirmar-llegada" class="boton boton-principal">📍 CONFIRMAR LLEGADA (GPS)</button>
+        <p id="mensaje-llegada" class="nota" role="status"></p>
+      </article>
+      <p id="estado-push" class="nota"></p>
       <button type="button" id="reportar-liquidacion" class="boton boton-principal" hidden>
         Reportar: EN LIQUIDACIÓN / POR FINALIZAR</button>
       <p id="mensaje-brigada" class="nota" role="status"></p>
@@ -146,6 +159,19 @@
           <button type="submit" id="guardar-reclasificacion" class="boton boton-oscuro" disabled>GUARDAR RECLASIFICACIÓN</button>
           <p id="mensaje-reclasificacion" class="nota" role="status"></p>
         </form>
+
+        <!-- Bolt 4 (decisión 7.2): un foco controlado vuelve a ser riesgoso; solo el coordinador lo reactiva -->
+        <section id="detalle-reactivar" class="carta" hidden>
+          <h3>Reactivar foco</h3>
+          <p class="nota">El foco estaba controlado (En liquidación) y vuelve a ser riesgoso: pasa a Nuevo con riesgo
+            Alto y encabeza el panel.</p>
+          <label for="justificacion-reactivar">Justificación (obligatoria, mínimo 15 caracteres)
+            <span id="contador-reactivar" class="contador">0/15 car.</span></label>
+          <textarea id="justificacion-reactivar" rows="2" maxlength="500" placeholder="Ej.: Rebrote con viento fuerte hacia la comunidad"></textarea>
+          <button type="button" id="reactivar-foco" class="boton boton-principal" disabled>⟳ REACTIVAR FOCO</button>
+          <p id="mensaje-reactivar" class="nota" role="status"></p>
+        </section>
+        <p id="detalle-reactivado" class="aviso" hidden></p>
 
         <section id="detalle-carta" class="carta">
           <h3>Carta municipal (Ley 602)</h3>

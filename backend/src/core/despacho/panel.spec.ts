@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { EstadoIncidente } from '../triage/enums/estado-incidente.enum';
 import { NivelRiesgo } from '../triage/enums/nivel-riesgo.enum';
 import { OrigenRiesgo } from '../triage/enums/origen-riesgo.enum';
-import { armarColumnas, FiltrosPanel, leerFiltros, TarjetaPanel } from './panel';
+import { armarColumnas, FiltrosPanel, leerFiltros, marcarPosiblesReactivaciones, TarjetaPanel } from './panel';
 
 const SIN_FILTRO: FiltrosPanel = { carta: null, riesgos: null, comunidad: null };
 
@@ -20,6 +20,11 @@ function tarjeta(parcial: Partial<TarjetaPanel>): TarjetaPanel {
     tieneCartaMunicipal: false,
     tieneContactoComunal: true,
     brigada: null,
+    reactivado: false,
+    posibleReactivacion: false,
+    sugerencia: null,
+    bloqueoDespacho: null,
+    notificacion: null,
     ...parcial,
   };
 }
@@ -88,5 +93,36 @@ describe('armarColumnas (RF-07)', () => {
       SIN_FILTRO,
     );
     expect(r.incidentes.Nuevo.map((t) => t.id)).toEqual(['alto-antiguo', 'alto-reciente', 'bajo']);
+  });
+});
+
+describe('Bolt 4: reactivación en el panel (decisión 7.2 del PO)', () => {
+  it('los focos reactivados encabezan su columna, por encima del riesgo y la antigüedad', () => {
+    const r = armarColumnas(
+      [
+        tarjeta({ id: 'alto-antiguo', fechaReporte: new Date('2026-09-29T06:00:00Z') }),
+        tarjeta({ id: 'reactivado', reactivado: true, fechaReporte: new Date('2026-09-29T12:00:00Z') }),
+      ],
+      SIN_FILTRO,
+    );
+    expect(r.incidentes.Nuevo.map((t) => t.id)).toEqual(['reactivado', 'alto-antiguo']);
+  });
+
+  it('marca "posible reactivación" un foco En Liquidación con un foco Nuevo posterior a menos de 2 km (solo aviso)', () => {
+    const controlado = tarjeta({ id: 'c', estado: EstadoIncidente.En_Liquidacion });
+    const lejano = tarjeta({ id: 'l', estado: EstadoIncidente.En_Liquidacion, coordenada: { latitud: -17, longitud: -62, precisionMetros: 5 } });
+    const nuevo = tarjeta({
+      id: 'n',
+      fechaReporte: new Date('2026-09-29T11:00:00Z'),
+      coordenada: { latitud: -16 + 1.5 / 111.195, longitud: -62, precisionMetros: 5 },
+    });
+    const anterior = tarjeta({ id: 'a', estado: EstadoIncidente.En_Liquidacion, fechaReporte: new Date('2026-09-29T12:00:00Z') });
+    marcarPosiblesReactivaciones([controlado, lejano, nuevo, anterior]);
+    expect(controlado.posibleReactivacion).toBe(true);
+    // El foco Nuevo es anterior a este controlado: no es un rebrote.
+    expect(anterior.posibleReactivacion).toBe(false);
+    expect(lejano.posibleReactivacion).toBe(false);
+    expect(nuevo.posibleReactivacion).toBe(false);
+    expect(controlado.estado).toBe(EstadoIncidente.En_Liquidacion);
   });
 });

@@ -6,6 +6,7 @@ import { DataSource } from 'typeorm';
  * - historial_estado y evento_auditoria: se rechaza todo UPDATE, DELETE y TRUNCATE.
  * - incidente.fecha_reporte y asignacion_despacho.timestamp_confirmacion_llegada: write-once
  *   (una vez fijados no cambian), porque de ellos sale el ΔT del KPI.
+ * - asignacion_despacho.fecha_asignacion: inmutable (cronómetro del despacho, HU-4.2, Bolt 4).
  * Idempotente: se aplica en cada arranque mientras se use `synchronize`; con migraciones pasará a una migración.
  */
 @Injectable()
@@ -62,6 +63,10 @@ CREATE TRIGGER incidente_fecha_reporte_inmutable
 
 CREATE OR REPLACE FUNCTION proteger_confirmacion_llegada() RETURNS trigger AS $$
 BEGIN
+  IF NEW.fecha_asignacion IS DISTINCT FROM OLD.fecha_asignacion THEN
+    RAISE EXCEPTION 'fecha_asignacion es inmutable (RNF-07, cronómetro del despacho)'
+      USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
   IF OLD.timestamp_confirmacion_llegada IS NOT NULL
      AND NEW.timestamp_confirmacion_llegada IS DISTINCT FROM OLD.timestamp_confirmacion_llegada THEN
     RAISE EXCEPTION 'timestamp_confirmacion_llegada es inmutable una vez registrado (RNF-07)'

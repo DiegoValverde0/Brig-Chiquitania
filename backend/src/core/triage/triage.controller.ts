@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
@@ -84,6 +85,18 @@ export class TriageController {
   @Roles(Rol.Coordinador)
   evaluacion(@Param('id', ParseUUIDPipe) id: string): Promise<EvaluacionIncidente> {
     return this.evaluaciones.evaluacion(id);
+  }
+
+  /** Bolt 4: reactiva un foco controlado ("En_Liquidacion" → "Nuevo", Alto) con `{ justificacion }` (≥15). */
+  @Post('incidentes/:id/reactivacion')
+  @HttpCode(200)
+  @Roles(Rol.Coordinador)
+  reactivar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: unknown,
+    @UsuarioActual() usuario: Usuario,
+  ): Promise<EvaluacionIncidente> {
+    return this.evaluaciones.reactivar(id, body, usuario.id);
   }
 
   /** CU-06 / HU-2.2: reclasificación manual con justificación obligatoria (≥15 caracteres). */

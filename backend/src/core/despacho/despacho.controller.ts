@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpStatus, Param, ParseUUIDPipe, Post, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { Roles, UsuarioActual } from '../seguridad/decoradores';
 import { Usuario } from '../seguridad/entities/usuario.entity';
 import { Rol } from '../seguridad/enums/rol.enum';
@@ -22,12 +23,19 @@ export class DespachoController {
     return this.despacho.sugerirBrigadas(id);
   }
 
+  /**
+   * RF-10: despacho en 1 clic `{ id?, brigadaId, versionBrigada? }`. 201 al crear; 200 si el `id` ya se usó para
+   * este mismo despacho (reintento). 409 si la brigada cambió (bloqueo optimista) o ya no es elegible.
+   */
   @Post('incidentes/:id/asignaciones')
-  asignar(
+  async asignar(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: unknown,
     @UsuarioActual() usuario: Usuario,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<OrdenDeSalida> {
-    return this.despacho.asignar(id, body, usuario.id);
+    const orden = await this.despacho.asignar(id, body, usuario.id);
+    res.status(orden.duplicada ? HttpStatus.OK : HttpStatus.CREATED);
+    return orden;
   }
 }

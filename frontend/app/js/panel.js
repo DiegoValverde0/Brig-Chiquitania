@@ -5,6 +5,9 @@
  * - Mapa esquemático en SVG propio, sin teselas ni librerías (RF-01), con focos agrupados por cuadrícula.
  * - Brigadas en sus 4 estados (RF-08); el coordinador libera las que están "En Liquidación".
  * Se actualiza cada 30 s mientras la pestaña está visible, sin perder el filtro ni el desplazamiento.
+ * Bolt 4: DESPACHAR (o REASIGNAR) en 1 clic desde la tarjeta, con confirmación humana (RS-03), UUID propio del
+ * clic (reintentar no duplica) y la versión de la brigada (bloqueo optimista); focos reactivados primero y estado
+ * del aviso al jefe (📨 enviado, ✔ leído, ⚠ fallido).
  */
 (function (global) {
   'use strict';
@@ -37,6 +40,8 @@
   var pidiendo = false;
   var otraVez = false; // un filtro cambió mientras había una consulta en curso
   var ultimo = null;
+  var clics = {}; // incidente → UUID del despacho en curso (el mismo en cada reintento)
+  var ETIQUETA_AVISO = { Enviada: '📨 Aviso enviado', Leida: '✔ Orden leída', Fallida: '⚠ Aviso fallido: llame al jefe', Pendiente: '… Avisando' };
 
   function texto(el, valor) {
     el.textContent = valor;
@@ -48,6 +53,14 @@
     if (clase) e.className = clase;
     if (contenido !== undefined) e.textContent = contenido;
     return e;
+  }
+
+  function corto(nombre) {
+    return nombre.replace('Brigada Departamental ', 'B');
+  }
+
+  function km(d) {
+    return (d < 10 ? Math.round(d * 10) / 10 : Math.round(d)) + ' km';
   }
 
   function hace(iso) {
@@ -180,13 +193,77 @@
     var pie = el('span', 'bloque pie-tarjeta');
     pie.appendChild(BrcEvaluacion.insigniaCarta(el('span'), t.estadoCarta));
     if (!t.tieneContactoComunal) pie.appendChild(el('span', 'insignia estado-error', 'Sin contacto'));
+    if (t.reactivado) pie.appendChild(el('span', 'insignia reactivado', '⟳ Reactivado'));
+    if (t.posibleReactivacion) pie.appendChild(el('span', 'insignia posible-reactivacion', 'Posible reactivación'));
     if (t.brigada) pie.appendChild(el('span', 'nota', '🚒 ' + t.brigada));
+    if (t.notificacion) {
+      var aviso = t.notificacion.leida ? 'Leida' : t.notificacion.estado;
+      var n = el('span', 'insignia aviso aviso-' + aviso, ETIQUETA_AVISO[aviso] + (aviso === 'Enviada' ? ' (' + (t.notificacion.canal === 'SMS' ? 'SMS' : 'push') + ')' : ''));
+      n.dataset.aviso = aviso;
+      pie.appendChild(n);
+    }
     boton.appendChild(pie);
     boton.addEventListener('click', function () {
       opciones.abrirFoco(t.id);
     });
     li.appendChild(boton);
+    if (t.estado === 'Nuevo') li.appendChild(zonaDespacho(t));
     return li;
+  }
+
+  // ---------- despacho en 1 clic (RF-10, HU-4.3) ----------
+
+  function zonaDespacho(t) {
+    var zona = el('div', 'zona-despacho');
+    var s = t.sugerencia;
+    var boton = el('button', 'boton despachar');
+    boton.type = 'button';
+    if (s) {
+      boton.textContent = (s.reasignacion ? '~ REASIGNAR ' : 'DESPACHAR ') + corto(s.nombre) + ' · ' + km(s.distanciaKm);
+      if (s.reasignacion) boton.className += ' reasignar';
+      boton.addEventListener('click', function () {
+        despachar(t, boton);
+      });
+    } else {
+      boton.textContent = 'DESPACHAR';
+      boton.disabled = true;
+      boton.title = t.bloqueoDespacho || '';
+    }
+    zona.appendChild(boton);
+    if (!s && t.bloqueoDespacho) zona.appendChild(el('span', 'nota bloqueo', '🔒 ' + t.bloqueoDespacho));
+    if (s && s.reasignacion) {
+      zona.appendChild(el('span', 'nota', 'En liquidación' + (s.focoAnterior ? ' de FOCO-' + s.focoAnterior.id.slice(0, 8) : '') + ': reasignación táctica'));
+    }
+    return zona;
+  }
+
+  /** RS-03: siempre confirma un humano. Un solo toque abre la confirmación; el segundo despacha. */
+  function despachar(t, boton) {
+    var s = t.sugerencia;
+    var resumen =
+      (s.reasignacion ? 'REASIGNACIÓN TÁCTICA\n' : 'DESPACHO\n') +
+      'FOCO-' + t.id.slice(0, 8) + ' · riesgo ' + t.nivelRiesgo + ' · ' + (t.comunidad || 'sin comunidad') + '\n' +
+      'Brigada: ' + s.nombre + ' (' + km(s.distanciaKm) + ')\n' +
+      (s.focoAnterior ? 'Deja FOCO-' + s.focoAnterior.id.slice(0, 8) + ' en liquidación\n' : '') +
+      'Se avisará al jefe por push o SMS con la ubicación y el contacto comunal.';
+    if (!confirm(resumen)) return;
+    if (!clics[t.id]) clics[t.id] = global.BrcUuid();
+    boton.disabled = true;
+    boton.textContent = 'Despachando…';
+    BrcApi.post('/incidentes/' + t.id + '/asignaciones', { id: clics[t.id], brigadaId: s.id, versionBrigada: s.version }).then(
+      function () {
+        delete clics[t.id];
+        texto($('error-panel'), '');
+        cargar();
+      },
+      function (e) {
+        if (e.estado === 409 || e.estado === 422) delete clics[t.id]; // la situación cambió: nuevo clic, nuevo id
+        boton.disabled = false;
+        boton.textContent = 'Reintentar despacho';
+        texto($('error-panel'), 'No se despachó FOCO-' + t.id.slice(0, 8) + ': ' + e.message);
+        if (e.estado === 409) cargar();
+      },
+    );
   }
 
   // ---------- mapa esquemático (SVG, sin teselas) ----------

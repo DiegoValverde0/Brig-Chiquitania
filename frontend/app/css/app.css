@@ -811,6 +811,81 @@ textarea {
   flex-wrap: wrap;
 }
 
+/* ---------- Bolt 4: despacho en 1 clic, reactivación y orden de salida ---------- */
+.zona-despacho {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 6px;
+}
+
+.boton.despachar {
+  width: auto;
+  min-height: 40px;
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  background: #111;
+  border-color: #111;
+  color: #fff;
+}
+
+.boton.despachar.reasignar {
+  background: var(--ambar);
+  border-color: var(--ambar);
+}
+
+.boton.despachar:disabled {
+  background: #eceff1;
+  border-color: var(--borde);
+  color: var(--suave);
+}
+
+.bloqueo {
+  font-size: 0.8rem;
+}
+
+.insignia.reactivado {
+  background: #4a148c;
+  color: #fff;
+}
+
+.insignia.posible-reactivacion {
+  background: #f3e5f5;
+  color: #4a148c;
+  border: 1px dashed #8e24aa;
+}
+
+.aviso-Enviada,
+.aviso-Pendiente {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.aviso-Leida {
+  background: #e8f5e9;
+  color: var(--verde);
+}
+
+.aviso-Fallida {
+  background: #ffebee;
+  color: var(--rojo-oscuro);
+}
+
+.orden {
+  border: 2px solid var(--rojo);
+}
+
+.orden h2 {
+  margin-top: 0;
+  color: var(--rojo-oscuro);
+}
+
+#orden-llamar[hidden] {
+  display: none;
+}
+
 /* Teléfono: columnas apiladas; cada una conserva su propio desplazamiento. */
 @media (max-width: 900px) {
   .kanban,
