@@ -167,6 +167,7 @@
     validar();
 
     pintarCarta();
+    pintarReactivacion();
 
     var historial = $('detalle-historial');
     historial.innerHTML = '';
@@ -297,6 +298,46 @@
     );
   }
 
+  // ---------- reactivación (Bolt 4, decisión 7.2) ----------
+
+  function pintarReactivacion() {
+    $('detalle-reactivar').hidden = actual.estado !== 'En_Liquidacion';
+    $('justificacion-reactivar').value = '';
+    texto($('mensaje-reactivar'), '');
+    validarReactivacion();
+    var aviso = $('detalle-reactivado');
+    aviso.hidden = !actual.reactivaciones;
+    if (actual.reactivaciones) {
+      texto(aviso, '⟳ Foco reactivado ' + (actual.reactivaciones > 1 ? actual.reactivaciones + ' veces' : '') + ' · última vez ' + hora(actual.reactivadoEn));
+    }
+  }
+
+  function validarReactivacion() {
+    var largo = $('justificacion-reactivar').value.trim().length;
+    var contador = $('contador-reactivar');
+    contador.textContent = largo + '/' + MINIMO + ' car.';
+    contador.className = 'contador ' + (largo >= MINIMO ? 'ok' : 'falta');
+    $('reactivar-foco').disabled = !(actual && largo >= MINIMO && largo <= 500);
+  }
+
+  function reactivar() {
+    if (!confirm('¿Reactivar FOCO-' + actual.id.slice(0, 8) + '? Vuelve a Nuevo con riesgo Alto para un nuevo despacho.')) return;
+    $('reactivar-foco').disabled = true;
+    texto($('mensaje-reactivar'), 'Guardando…');
+    BrcApi.post('/incidentes/' + actual.id + '/reactivacion', { justificacion: $('justificacion-reactivar').value }).then(
+      function (res) {
+        actual = res.datos;
+        pintarDetalle();
+        texto($('mensaje-reactivar'), '');
+        texto($('mensaje-reclasificacion'), '✔ Foco reactivado: está primero en la columna Nuevo del panel.');
+      },
+      function (e) {
+        validarReactivacion();
+        texto($('mensaje-reactivar'), 'No se reactivó: ' + e.message);
+      },
+    );
+  }
+
   // ---------- reclasificación (HU-2.2) ----------
 
   function nivelElegido() {
@@ -349,6 +390,8 @@
       verificarCarta('Rechazada');
     });
     $('motivo-rechazo').addEventListener('input', validarMotivo);
+    $('justificacion-reactivar').addEventListener('input', validarReactivacion);
+    $('reactivar-foco').addEventListener('click', reactivar);
   }
 
   /** Muestra la lista; con un id (tarjeta del panel COED) abre directamente ese foco. */

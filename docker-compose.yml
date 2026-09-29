@@ -4,7 +4,8 @@
 # Desarrollo local: `docker compose up -d --build` funciona sin configurar nada (NODE_ENV=development,
 # claves de ejemplo, usuarios demo con la semilla).
 # VPS: crear un archivo .env junto a este archivo con NODE_ENV=production, CLAVE_CIFRADO (32 bytes base64:
-# `openssl rand -base64 32`), SMS_WEBHOOK_SECRETO, DB_PASSWORD y DB_SYNCHRONIZE=false cuando haya migraciones.
+# `openssl rand -base64 32`), SMS_WEBHOOK_SECRETO, VAPID_* (`docker compose run --rm api node dist/generar-vapid
+# mailto:…`), DB_PASSWORD y DB_SYNCHRONIZE=false cuando haya migraciones. Web Push exige HTTPS en el VPS.
 services:
   db:
     image: postgres:16-alpine
@@ -54,6 +55,12 @@ services:
       SMS_PROVEEDOR: ${SMS_PROVEEDOR:-simulado}
       SMS_WEBHOOK_SECRETO: ${SMS_WEBHOOK_SECRETO:-}
       SMS_NUMERO_CENTRAL: ${SMS_NUMERO_CENTRAL:-+59170000000}
+      # Bolt 4: Web Push (obligatorias en producción; en desarrollo se generan en el volumen) y minutos sin leer
+      # antes del SMS de respaldo.
+      VAPID_PUBLICA: ${VAPID_PUBLICA:-}
+      VAPID_PRIVADA: ${VAPID_PRIVADA:-}
+      VAPID_CONTACTO: ${VAPID_CONTACTO:-mailto:coed@example.org}
+      SMS_RESPALDO_MIN: ${SMS_RESPALDO_MIN:-3}
     volumes:
       - evidencias:/app/almacen
     ports:

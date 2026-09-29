@@ -9,7 +9,8 @@ Modelo de referencia: `documentacion_base/Modelos_UML.md`. Alcance por bolt: `do
 - `@nestjs/config` para variables de entorno (`.env.example`).
 - Docker: `backend/Dockerfile` multietapa (deps → build → runtime `node:22-alpine`, usuario no root) y
   `docker-compose.yml` en la raíz (`db` + `api` + `web` con nginx para la app de `frontend/app`).
-- Sin dependencias nuevas de runtime en el Bolt 1: cifrado con `node:crypto`, validación manual, SMS por puerto propio.
+- Sin dependencias nuevas de runtime: cifrado con `node:crypto`, validación manual, SMS por puerto propio y Web Push
+  (VAPID + `aes128gcm`) implementado con `node:crypto` (Bolt 4, verificado contra el vector del RFC 8291).
 
 ## Estructura
 ```
@@ -19,15 +20,18 @@ backend/src/
 ├── health.controller.ts    # GET /api/health (SELECT 1, público)
 ├── seed.ts / semilla.ts    # semilla idempotente (usuarios demo solo fuera de producción)
 ├── crear-usuario.ts        # alta por consola (primer coordinador en producción)
+├── generar-vapid.ts        # claves VAPID de Web Push para el .env del VPS (Bolt 4)
 ├── common/                 # entidad-base, validacion, geo, cifrado (AES-256-GCM), filtro de errores de cuerpo,
 │                           # almacén de archivos cifrados (fotos y cartas; tipo por firma de bytes)
 └── core/
     ├── reporte/      (M1)  reporte GPS/distancia, evidencia fotográfica, catálogo comunal
     ├── triage/       (M2)  incidente, carta municipal (adjuntar/validar/rechazar), motor de riesgo, evaluación
-    ├── despacho/     (M3 / M4)  panel COED con filtros, sugerencia y despacho, estados tácticos de brigada
+    ├── despacho/     (M3 / M4)  panel COED, elegibilidad y despacho en 1 clic, reasignación táctica, estados
+    │                            tácticos, notificaciones al jefe (push → SMS de respaldo)
     ├── operaciones/  (M4 / M5)  llegada, ΔT, historial y evento_auditoria append-only
     ├── seguridad/    (MT-2)  usuarios, roles, guard global
-    └── sync/         (MT-1)  canal SMS: codec BRC1, pasarela (puerto + simulada), webhook, bandeja
+    └── sync/         (MT-1)  canal SMS: codec BRC1, pasarela (puerto + simulada), webhook, bandeja;
+                              canal Web Push (claves VAPID, suscripciones, envío cifrado)
 ```
 Un `@Module` por paquete UML `core.*`; cada módulo registra sus entidades con `TypeOrmModule.forFeature` y
 exporta `TypeOrmModule`.
@@ -79,7 +83,10 @@ node dist/crear-usuario "Nombre" Coordinador   # alta por consola; imprime el to
 - Transiciones de estado siempre en una transacción que inserta en `historial_estado` vía
   `HistorialEstadoService` (única vía de escritura).
 - Guardas de despacho: riesgo Alto/Medio, `CartaMunicipal.habilitaDespacho()` (adjunta y no rechazada: Ley 602),
-  `ContactoComunal` no vacío, incidente en "Nuevo" y brigada "Disponible" (UPDATE condicional contra doble despacho).
+  `ContactoComunal` no vacío, incidente en "Nuevo", brigada elegible (`despacho/elegibilidad.ts`: Disponible, o
+  En Liquidación a <30 km de un foco Alto) y con jefe con teléfono (Bolt 4). UPDATE condicional por estado y
+  `version` (bloqueo optimista) contra el doble despacho; `id` del cliente para reintentos idempotentes.
+- Toda actualización del estado de una brigada sube `version` (`version: () => 'version + 1'`).
 - Motor de riesgo (`MotorRiesgoService`, `motor-v2` desde el Bolt 2): comunidad habitada <5 km ⇒ Alto (texto
   exacto "Amenaza directa a vida humana comunitaria"), 5–15 km ⇒ Medio (umbral aprobado por el PO), ≥15 km ⇒ Bajo.
   Los `PredioPrivado` (estancias) solo se listan como excluidos; nunca elevan el nivel. Devuelve `factores`
@@ -137,13 +144,28 @@ Bolt 3 (trámite municipal y estados tácticos):
 - `GET /api/panel`: filtros en `despacho/panel.ts` (funciones puras, en memoria porque las coordenadas están
   cifradas); orden por riesgo y antigüedad; contadores por columna. 60 focos responden en <1 s (prueba e2e).
 
+Bolt 4 (despacho y reasignación táctica):
+- `Brigada.version` (bloqueo optimista). `AsignacionDespacho`: `id` del cliente (idempotencia), `rutaSugerida` =
+  distancia y rumbo en línea recta + coordenadas (`rutaEnLineaRecta` en `common/geo.ts`, decisión 7.3), y
+  `fecha_asignacion` inmutable por trigger (cronómetro de HU-4.2).
+- `Notificacion` (UML, 1..* por asignación): `canal` (WebPush | SMS), `contenido` cifrado, `estadoEnvio`
+  (Pendiente | Enviada | Fallida | Leida) [+ `detalle`, `enviadaEn`, `leidaEn`, inferencia]. `NotificacionesService`
+  envía después del commit (nunca revierte el despacho): push; SMS si no hay suscripción, si falla o si no se lee en
+  `SMS_RESPALDO_MIN` (barrido cada 30 s). SMS de despacho ≤160 en `mensaje-despacho.ts`.
+- `SuscripcionPush` (`core.sync`, [inferencia]): endpoint cifrado + hash único; en producción solo servicios de push
+  conocidos por https (anti-SSRF). Claves `VAPID_*` obligatorias en producción; en desarrollo `almacen/vapid-dev.json`.
+- `Incidente.reactivadoEn` / `reactivaciones` y `TipoEventoHistorial.Reactivacion` (decisión 7.2): solo el
+  Coordinador, solo desde En Liquidación → Nuevo, Alto; los reactivados encabezan su columna. "Posible
+  reactivación" (reporte Nuevo posterior a <2 km) es solo un aviso.
+- Reasignación: el foco anterior sigue En Liquidación (decisión 7.5), con historial en ambos focos y
+  `evento_auditoria` `ReasignacionTactica`. `PUT /api/brigadas/:id/jefe` asigna el jefe (decisión 7.4).
+
 Pendiente para bolts posteriores:
 
 | Tema | UML / SRS oficial | Implementado | Bolt |
 |---|---|---|---|
 | `Bitacora` | fecha, nivelAgua, nivelCombustible, herramientasOperativas, kmFajaMitigados, porcentajeControl; 0..* por Incidente | fechaHora, descripcion (texto libre) ligada a AsignacionDespacho | 5 |
 | `InformeConsolidado` | fechaGeneracion, contenidoPDF, tiempoTotalDespacho, justificacionFalsoPositivo; 0..1 por Incidente | resumen, fechaCierre, hectareasAfectadas; ligado a AsignacionDespacho | 5 |
-| `Notificacion` | canal, contenido, estadoEnvio; 1..* por AsignacionDespacho (Web Push / SMS al jefe de brigada) | — (la pasarela SMS ya existe) | 4 |
 | Bioma como factor de riesgo | RTM original: "distancia a población y bioma" | Diferido por el PO (sin datos de bioma) | — |
 | Migraciones | Esquema versionado antes del piloto | `synchronize` | 1.0 |
 

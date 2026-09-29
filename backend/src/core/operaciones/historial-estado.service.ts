@@ -56,6 +56,25 @@ export class HistorialEstadoService {
     });
   }
 
+  /** Bolt 4: reactivación (En Liquidación → Nuevo, riesgo Alto) con la justificación del coordinador. */
+  async registrarReactivacion(
+    em: EntityManager,
+    incidente: Incidente,
+    justificacion: string,
+    usuarioId: string,
+  ): Promise<void> {
+    await em.insert(HistorialEstado, {
+      incidente: { id: incidente.id },
+      tipoEvento: TipoEventoHistorial.Reactivacion,
+      estadoAnterior: incidente.estado,
+      estadoNuevo: EstadoIncidente.Nuevo,
+      nivelAnterior: incidente.nivelRiesgo,
+      nivelNuevo: NivelRiesgo.Alto,
+      justificacion,
+      usuario: { id: usuarioId },
+    });
+  }
+
   /** HU-2.2: reclasificación manual del riesgo; el estado del incidente no cambia. */
   async registrarReclasificacion(
     em: EntityManager,

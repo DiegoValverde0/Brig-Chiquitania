@@ -71,6 +71,16 @@ export class Incidente extends EntidadBase {
   @OneToOne(() => EvidenciaFotografica, (evidencia) => evidencia.incidente)
   evidencia?: Relation<EvidenciaFotografica> | null;
 
+  /**
+   * Bolt 4: foco que estaba controlado (En Liquidación) y el coordinador reactivó porque vuelve a ser riesgoso
+   * [inferencia de atributos, decisión 7.2 del PO]. Encabeza su columna en el panel.
+   */
+  @Column({ name: 'reactivado_en', type: 'timestamptz', nullable: true })
+  reactivadoEn: Date | null;
+
+  @Column({ type: 'int', default: 0 })
+  reactivaciones: number;
+
   /** ΔT del KPI en minutos (HU-5.3): T_llegada − T_reporte. */
   calcularTiempoDespacho(llegada: Date): number {
     return (llegada.getTime() - this.fechaReporte.getTime()) / 60000;

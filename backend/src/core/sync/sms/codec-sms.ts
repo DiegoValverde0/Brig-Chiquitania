@@ -89,15 +89,20 @@ export function decodificarReporte(texto: string): ReporteSms {
   throw new ErrorSms('Formato de SMS no reconocido');
 }
 
+/** Texto seguro para GSM-7 (sin tildes ni símbolos fuera de ASCII), sin recortar. */
+export function textoGsm(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/Δ/g, 'dT')
+    .replace(/[^\x20-\x7e]/g, '?');
+}
+
 /**
  * Prepara un mensaje saliente para un solo segmento SMS: sin tildes ni símbolos fuera de ASCII (un solo
  * carácter no GSM-7 obliga a codificar en UCS-2 y el límite baja a 70) y recortado a 160 caracteres.
  */
 export function smsPlano(texto: string): string {
-  const ascii = texto
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/Δ/g, 'dT')
-    .replace(/[^\x20-\x7e]/g, '?');
+  const ascii = textoGsm(texto);
   return ascii.length <= LARGO_MAXIMO_SMS ? ascii : `${ascii.slice(0, LARGO_MAXIMO_SMS - 3)}...`;
 }

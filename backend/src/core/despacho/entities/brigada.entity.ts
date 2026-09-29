@@ -27,6 +27,13 @@ export class Brigada extends EntidadBase {
   @JoinColumn({ name: 'jefe_id' })
   jefe: Relation<Usuario> | null;
 
+  /**
+   * Bloqueo optimista (Bolt 4, riesgo "doble despacho"): sube en cada cambio de estado de la brigada; el despacho
+   * exige la versión que vio el coordinador. Se incrementa a mano (`version: () => 'version + 1'`) en cada UPDATE.
+   */
+  @Column({ type: 'int', default: 0 })
+  version: number;
+
   @OneToMany(() => AsignacionDespacho, (asignacion) => asignacion.brigada)
   asignaciones: Relation<AsignacionDespacho>[];
 }

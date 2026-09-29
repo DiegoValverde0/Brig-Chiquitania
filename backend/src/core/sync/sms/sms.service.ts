@@ -81,18 +81,28 @@ export class SmsService {
 
   /** Envía un SMS por la pasarela activa y lo deja registrado. Devuelve el texto final enviado. */
   async enviar(numero: string, texto: string, incidenteId: string | null = null): Promise<string> {
+    return (await this.enviarConEstado(numero, texto, incidenteId)).texto;
+  }
+
+  /** Igual que `enviar`, pero informa si la pasarela lo aceptó (notificaciones del Bolt 4). */
+  async enviarConEstado(
+    numero: string,
+    texto: string,
+    incidenteId: string | null = null,
+  ): Promise<{ texto: string; enviado: boolean; detalle: string | null }> {
     const plano = smsPlano(texto);
     try {
       const { idProveedor } = await this.pasarela.enviar(numero, plano);
       await this.registrar(DireccionSms.Saliente, numero, plano, EstadoSms.Enviado, { idProveedor, incidenteId });
+      return { texto: plano, enviado: true, detalle: null };
     } catch (error) {
       this.log.warn(`No se pudo enviar el SMS: ${(error as Error).message}`);
       await this.registrar(DireccionSms.Saliente, numero, plano, EstadoSms.Fallido, {
         detalle: (error as Error).message,
         incidenteId,
       });
+      return { texto: plano, enviado: false, detalle: (error as Error).message };
     }
-    return plano;
   }
 
   async listar(limite = 100): Promise<MensajeSms[]> {

@@ -1,5 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
+import { distanciaKm } from '../../common/geo';
+import { RADIO_REACTIVACION_KM } from '../reporte/reporte.service';
 import { EstadoCartaPanel } from '../triage/carta-municipal.service';
+import { Candidata } from './elegibilidad';
 import { EstadoIncidente } from '../triage/enums/estado-incidente.enum';
 import { NivelRiesgo } from '../triage/enums/nivel-riesgo.enum';
 import { OrigenRiesgo } from '../triage/enums/origen-riesgo.enum';
@@ -35,6 +38,23 @@ export interface TarjetaPanel {
   tieneCartaMunicipal: boolean;
   tieneContactoComunal: boolean;
   brigada: string | null;
+  /** Bolt 4: foco controlado que el coordinador reactivó (encabeza su columna). */
+  reactivado: boolean;
+  /** Bolt 4: foco En Liquidación con un foco Nuevo a menos de 2 km (aviso; decide el coordinador). */
+  posibleReactivacion: boolean;
+  /** Bolt 4: brigada para el despacho en 1 clic (solo tarjetas "Nuevo"). */
+  sugerencia: Candidata | null;
+  /** Bolt 4: por qué el botón DESPACHAR está desactivado. */
+  bloqueoDespacho: string | null;
+  /** Bolt 4: estado del aviso al jefe de brigada (última notificación de la asignación activa). */
+  notificacion: ResumenNotificacion | null;
+}
+
+export interface ResumenNotificacion {
+  canal: string;
+  estado: string;
+  /** El jefe abrió la orden (acuse de recibo) por cualquiera de los canales. */
+  leida: boolean;
 }
 
 const ORDEN_RIESGO: Record<string, number> = { Alto: 0, Medio: 1, Bajo: 2 };
@@ -71,10 +91,31 @@ export function cumpleFiltros(t: TarjetaPanel, f: FiltrosPanel): boolean {
   return true;
 }
 
-/** Más urgente primero: riesgo y, a igual riesgo, el reporte más antiguo (lleva más tiempo esperando). */
+/**
+ * Más urgente primero: los reactivados (Bolt 4, decisión 7.2: reordenan la prioridad), luego el riesgo y, a igual
+ * riesgo, el reporte más antiguo (lleva más tiempo esperando).
+ */
 export function ordenarTarjetas(a: TarjetaPanel, b: TarjetaPanel): number {
+  if (a.reactivado !== b.reactivado) return a.reactivado ? -1 : 1;
   const r = (ORDEN_RIESGO[a.nivelRiesgo ?? ''] ?? 3) - (ORDEN_RIESGO[b.nivelRiesgo ?? ''] ?? 3);
   return r !== 0 ? r : a.fechaReporte.getTime() - b.fechaReporte.getTime();
+}
+
+/**
+ * Marca los focos En Liquidación con un foco Nuevo reportado después a menos de 2 km: posible reactivación
+ * (solo aviso para el coordinador, RS-03; nunca cambia el estado).
+ */
+export function marcarPosiblesReactivaciones(tarjetas: TarjetaPanel[]): void {
+  const nuevos = tarjetas.filter((t) => t.estado === EstadoIncidente.Nuevo);
+  for (const t of tarjetas) {
+    t.posibleReactivacion =
+      t.estado === EstadoIncidente.En_Liquidacion &&
+      nuevos.some(
+        (n) =>
+          n.fechaReporte.getTime() > t.fechaReporte.getTime() &&
+          distanciaKm(n.coordenada, t.coordenada) < RADIO_REACTIVACION_KM,
+      );
+  }
 }
 
 /** Agrupa en columnas y calcula los contadores (total y con carta) de lo que queda tras el filtro. */

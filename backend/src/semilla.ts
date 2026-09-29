@@ -55,7 +55,19 @@ export const USUARIOS_DEMO: Array<{ id: string; nombre: string; rol: Rol; telefo
   { id: '00000000-0000-4000-8000-000000000402', nombre: 'Coordinador COED (demo)', rol: Rol.Coordinador, telefono: '+59170000402', token: 'demo-coordinador' },
   { id: '00000000-0000-4000-8000-000000000403', nombre: 'Jefe de Brigada (demo)', rol: Rol.JefeBrigada, telefono: '+59170000403', token: 'demo-jefe-brigada' },
   { id: '00000000-0000-4000-8000-000000000404', nombre: 'Responsable UGR (demo)', rol: Rol.ResponsableUGR, telefono: '+59170000404', token: 'demo-ugr' },
+  // Bolt 4 (decisión 7.4 del PO): sin jefe con teléfono no se despacha; un jefe demo por brigada.
+  { id: '00000000-0000-4000-8000-000000000405', nombre: 'Jefe Brigada 1 (demo)', rol: Rol.JefeBrigada, telefono: '+59170000405', token: 'demo-jefe-1' },
+  { id: '00000000-0000-4000-8000-000000000406', nombre: 'Jefe Brigada 2 (demo)', rol: Rol.JefeBrigada, telefono: '+59170000406', token: 'demo-jefe-2' },
+  { id: '00000000-0000-4000-8000-000000000407', nombre: 'Jefe Brigada 4 (demo)', rol: Rol.JefeBrigada, telefono: '+59170000407', token: 'demo-jefe-4' },
 ];
+
+/** Brigada → jefe demo (solo fuera de producción). La Brigada 3 es del jefe demo principal (`demo-jefe-brigada`). */
+export const JEFES_DEMO: Record<string, string> = {
+  '00000000-0000-4000-8000-000000000201': '00000000-0000-4000-8000-000000000405',
+  '00000000-0000-4000-8000-000000000202': '00000000-0000-4000-8000-000000000406',
+  '00000000-0000-4000-8000-000000000203': '00000000-0000-4000-8000-000000000403',
+  '00000000-0000-4000-8000-000000000204': '00000000-0000-4000-8000-000000000407',
+};
 
 export const BRIGADA_DEL_JEFE_DEMO = '00000000-0000-4000-8000-000000000203';
 export const JEFE_DEMO = '00000000-0000-4000-8000-000000000403';
@@ -91,9 +103,12 @@ export async function aplicarSemilla(ds: DataSource): Promise<void> {
         ubicacionActual: { latitud: b.latitud, longitud: b.longitud, precisionMetros: null },
       });
     }
-    // Bolt 3: el jefe demo lidera la Brigada Departamental 3 (solo fuera de producción, como los usuarios demo).
+    // Bolt 3/4: cada brigada con su jefe demo (solo fuera de producción, como los usuarios demo). En producción
+    // el coordinador los asigna con PUT /api/brigadas/:id/jefe.
     if (process.env.NODE_ENV !== 'production') {
-      await em.update(Brigada, { id: BRIGADA_DEL_JEFE_DEMO }, { jefe: { id: JEFE_DEMO } });
+      for (const [brigada, jefe] of Object.entries(JEFES_DEMO)) {
+        await em.update(Brigada, { id: brigada }, { jefe: { id: jefe } });
+      }
     }
     for (const p of PREDIOS) {
       await em.save(PredioPrivado, {

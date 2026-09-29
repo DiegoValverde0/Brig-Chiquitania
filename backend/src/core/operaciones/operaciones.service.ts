@@ -68,7 +68,11 @@ export class OperacionesService {
       await em.update(
         Brigada,
         { id: brigada.id },
-        { estadoOperativo: EstadoBrigada.En_Combate_Activo, ubicacionActual: { ...punto, precisionMetros } },
+        {
+          estadoOperativo: EstadoBrigada.En_Combate_Activo,
+          ubicacionActual: { ...punto, precisionMetros },
+          version: () => 'version + 1',
+        },
       );
       const delta = redondear(incidente.calcularTiempoDespacho(llegada));
       // El ΔT queda además asentado en el historial append-only (RNF-07).

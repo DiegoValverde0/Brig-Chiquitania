@@ -310,6 +310,7 @@ describe('Captura resiliente y contacto comunal (Bolt 1)', () => {
       get: (url) => servidor().get(url).set(auth),
       post: (url) => servidor().post(url).set(auth),
       put: (url) => servidor().put(url).set(auth),
+      delete: (url) => servidor().delete(url).set(auth),
     };
   }
 });

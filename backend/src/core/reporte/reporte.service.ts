@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, QueryFailedError } from 'typeorm';
-import { PuntoGeo, puntoDestino } from '../../common/geo';
+import { distanciaKm, PuntoGeo, puntoDestino } from '../../common/geo';
 import {
   exigirEnum,
   exigirNumero,
@@ -26,6 +26,8 @@ export const PRECISION_MAXIMA_M = 15;
 export const DISTANCIA_AVISTAMIENTO_MAX_KM = 50;
 
 const GRADOS_RUMBO: Record<Rumbo, number> = { N: 0, E: 90, S: 180, O: 270 };
+/** Bolt 4 (decisión 7.2): un reporte a menos de esta distancia de un foco controlado sugiere reactivarlo. */
+export const RADIO_REACTIVACION_KM = 2;
 
 /** Canal por el que llegó el reporte: la app (datos) o el fallback SMS (RNF-02). */
 export type OrigenReporte = 'App' | 'SMS';
@@ -56,6 +58,11 @@ export interface VistaReporte {
   comunidad: { id: string; nombre: string } | null;
   contactoComunal: { nombreAutoridad: string; telefono: string; cargo: string } | null;
   tieneEvidencia: boolean;
+  /**
+   * Bolt 4: focos En Liquidación (controlados) a menos de 2 km de este reporte. Solo es un aviso para el
+   * coordinador, que decide si los reactiva (RS-03); nunca cambia su estado.
+   */
+  posibleReactivacion: Array<{ id: string; distanciaKm: number }>;
 }
 
 export interface ResultadoReporte {
@@ -193,6 +200,20 @@ export class ReporteService {
           ? { nombreAutoridad: contacto.nombreAutoridad, telefono: contacto.telefono, cargo: contacto.cargo }
           : null,
       tieneEvidencia: !!i.evidencia,
+      posibleReactivacion:
+        i.estado === EstadoIncidente.Nuevo ? await this.focosControladosCerca(i.id, i.coordenada) : [],
     };
+  }
+
+  /** Focos En Liquidación a menos de RADIO_REACTIVACION_KM (en la aplicación: las coordenadas están cifradas). */
+  private async focosControladosCerca(id: string, punto: PuntoGeo): Promise<Array<{ id: string; distanciaKm: number }>> {
+    const controlados = await this.dataSource
+      .getRepository(Incidente)
+      .findBy({ estado: EstadoIncidente.En_Liquidacion });
+    return controlados
+      .filter((c) => c.id !== id)
+      .map((c) => ({ id: c.id, distanciaKm: Math.round(distanciaKm(punto, c.coordenada) * 100) / 100 }))
+      .filter((c) => c.distanciaKm < RADIO_REACTIVACION_KM)
+      .sort((a, b) => a.distanciaKm - b.distanciaKm);
   }
 }

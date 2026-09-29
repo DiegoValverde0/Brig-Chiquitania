@@ -1,6 +1,10 @@
 /*
- * Vista del Jefe de Brigada (RF-08; Acta ACTA-002, acuerdo 4): estado táctico de su brigada y el botón
- * "Reportar: En Liquidación / Por finalizar", disponible solo cuando la brigada está En Combate Activo.
+ * Vista del Jefe de Brigada (RF-08; Acta ACTA-002, acuerdo 4; HU-4.2, Bolt 4):
+ * - estado táctico de su brigada y el botón "Reportar: En Liquidación / Por finalizar" (solo En Combate Activo);
+ * - orden de salida: coordenadas, ruta en línea recta, contacto comunal, cronómetro desde la asignación;
+ *   al mostrarla se envía el acuse de recibo (evita el SMS de respaldo a los 3 minutos);
+ * - CONFIRMAR LLEGADA con el GPS del teléfono (HU-5.1);
+ * - suscripción Web Push para recibir la próxima orden (sin push, llega por SMS).
  * La liberación (Disponible) la hace el coordinador desde el panel COED.
  */
 (function (global) {
@@ -13,10 +17,14 @@
     En_Liquidacion: 'En liquidación / por finalizar',
   };
   var ETIQUETA_FOCO = { Asignado: 'Asignado', En_Atencion: 'En atención', En_Liquidacion: 'En liquidación' };
+  /** La llegada no exige los 15 m del reporte (RF-01): basta ubicar a la brigada en el foco [inferencia]. */
+  var PRECISION_LLEGADA_M = 60;
   var $ = function (id) {
     return document.getElementById(id);
   };
   var actual = null;
+  var cronometro = null;
+  var leidas = {}; // acuses ya enviados en esta sesión
 
   function linea(caja, contenido, clase) {
     var p = document.createElement('p');
@@ -48,10 +56,151 @@
     } else {
       linea(caja, 'Sin foco asignado.', 'nota');
     }
-    var puede = b.estadoOperativo === 'En_Combate_Activo';
-    $('reportar-liquidacion').hidden = !puede;
+    $('reportar-liquidacion').hidden = b.estadoOperativo !== 'En_Combate_Activo';
     if (b.estadoOperativo === 'En_Liquidacion') linea(caja, 'La central liberará la brigada al terminar la liquidación.', 'nota');
+    pintarOrden(b.orden);
   }
+
+  // ---------- orden de salida (HU-4.2) ----------
+
+  function pintarOrden(o) {
+    clearInterval(cronometro);
+    $('orden-salida').hidden = !o;
+    if (!o) return;
+    var i = o.incidente;
+    $('orden-foco').textContent =
+      'FOCO-' + i.id.slice(0, 8) + ' · riesgo ' + (i.nivelRiesgo || 'sin calcular') + (i.comunidad ? ' · ' + i.comunidad : '');
+    $('orden-coordenadas').textContent = 'Lat: ' + i.latitud.toFixed(5) + '  Lon: ' + i.longitud.toFixed(5);
+    $('orden-ruta').textContent = o.rutaSugerida ? 'Ruta en línea recta: ' + o.rutaSugerida.split(' (')[0] + ' desde la posición de la brigada' : '';
+    var llamar = $('orden-llamar');
+    if (o.contacto) {
+      $('orden-contacto').textContent = 'Referente comunal: ' + o.contacto.nombre + ' · ' + o.contacto.telefono + ' (' + o.contacto.cargo + ')';
+      llamar.href = 'tel:' + o.contacto.telefono.replace(/[^\d+]/g, '');
+      llamar.hidden = false;
+    } else {
+      $('orden-contacto').textContent = 'Sin referente comunal registrado: consulte a la central.';
+      llamar.hidden = true;
+    }
+    $('confirmar-llegada').hidden = o.llegadaConfirmada;
+    $('orden-accion').hidden = o.llegadaConfirmada;
+    $('orden-aviso').textContent = o.llegadaConfirmada ? 'llegada confirmada' : 'orden recibida';
+    var desde = new Date(o.fechaAsignacion).getTime();
+    var tic = function () {
+      var min = Math.max(0, Math.floor((Date.now() - desde) / 60000));
+      $('orden-cronometro').textContent = min < 60 ? min + ' min' : Math.floor(min / 60) + ' h ' + (min % 60) + ' min';
+    };
+    tic();
+    cronometro = setInterval(tic, 30000);
+    acusarRecibo(o);
+  }
+
+  function acusarRecibo(o) {
+    if (leidas[o.asignacionId] || o.llegadaConfirmada) return;
+    leidas[o.asignacionId] = true;
+    BrcApi.post('/asignaciones/' + o.asignacionId + '/leida', {}).then(null, function () {
+      leidas[o.asignacionId] = false; // se reintenta en la próxima actualización
+    });
+  }
+
+  /**
+   * HU-5.1: llegada con el GPS del teléfono (decisión del PO, 29/09/2026). Con señal débil el jefe puede confirmar
+   * igual y se envían las coordenadas con su precisión real (queda auditada). Sin GPS no se envía nada: la llegada
+   * se avisa por radio y la registra la central (la API exige coordenadas: son la evidencia del ΔT).
+   */
+  function confirmarLlegada() {
+    var o = actual && actual.orden;
+    if (!o) return;
+    var mensaje = $('mensaje-llegada');
+    var boton = $('confirmar-llegada');
+    var sinGps = function (motivo) {
+      boton.disabled = false;
+      mensaje.textContent = motivo + ' Avise su llegada por radio: la central la registra.';
+    };
+
+    function enviar(pos) {
+      mensaje.textContent = 'Enviando confirmación…';
+      BrcApi.post('/asignaciones/' + o.asignacionId + '/llegada', {
+        latitud: Math.round(pos.coords.latitude * 1e6) / 1e6,
+        longitud: Math.round(pos.coords.longitude * 1e6) / 1e6,
+        precisionMetros: Math.round(pos.coords.accuracy * 10) / 10,
+      }).then(
+        function (res) {
+          boton.disabled = false;
+          mensaje.textContent = '✔ Llegada confirmada. ΔT = ' + res.datos.deltaMinutos + ' min desde el reporte.';
+          cargar();
+        },
+        function (e) {
+          boton.disabled = false;
+          mensaje.textContent = 'No se confirmó: ' + e.message;
+        },
+      );
+    }
+
+    if (!('geolocation' in navigator)) return sinGps('Este teléfono no tiene GPS.');
+    boton.disabled = true;
+    mensaje.textContent = 'Buscando señal GPS…';
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        var precision = Math.round(pos.coords.accuracy);
+        if (
+          precision > PRECISION_LLEGADA_M &&
+          !confirm('La señal GPS es débil (±' + precision + ' m). ¿Confirma que ya llegó al foco con esta ubicación aproximada?')
+        ) {
+          boton.disabled = false;
+          mensaje.textContent = 'Cancelado. Reintente a cielo abierto.';
+          return;
+        }
+        enviar(pos);
+      },
+      function () {
+        sinGps('No se obtuvo señal GPS.');
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 60000 },
+    );
+  }
+
+  // ---------- Web Push (RF-11) ----------
+
+  function aBytes(b64u) {
+    var b64 = (b64u + '===='.slice(b64u.length % 4)).replace(/-/g, '+').replace(/_/g, '/');
+    var crudo = atob(b64);
+    var bytes = new Uint8Array(crudo.length);
+    for (var i = 0; i < crudo.length; i++) bytes[i] = crudo.charCodeAt(i);
+    return bytes;
+  }
+
+  /** Suscribe el navegador para recibir la orden por push; si no se puede, la orden llega por SMS. */
+  function suscribirPush() {
+    var estado = $('estado-push');
+    if (!('serviceWorker' in navigator) || !('PushManager' in global) || !('Notification' in global)) {
+      estado.textContent = 'Este navegador no recibe notificaciones: las órdenes le llegarán por SMS.';
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      estado.textContent = 'Notificaciones bloqueadas: las órdenes le llegarán por SMS.';
+      return;
+    }
+    Promise.all([navigator.serviceWorker.ready, BrcApi.get('/notificaciones/clave-publica')])
+      .then(function (r) {
+        var registro = r[0];
+        return registro.pushManager.getSubscription().then(function (existente) {
+          return existente || registro.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: aBytes(r[1].datos.clavePublica) });
+        });
+      })
+      .then(function (suscripcion) {
+        return BrcApi.post('/notificaciones/suscripcion', JSON.parse(JSON.stringify(suscripcion)));
+      })
+      .then(
+        function () {
+          estado.textContent = '🔔 Notificaciones activas: recibirá la orden de salida en este teléfono (y por SMS si no la abre).';
+        },
+        function () {
+          estado.textContent = 'No se activaron las notificaciones: las órdenes le llegarán por SMS.';
+        },
+      );
+  }
+
+  // ---------- carga ----------
 
   function cargar() {
     $('mensaje-brigada').textContent = '';
@@ -63,14 +212,20 @@
       function (e) {
         actual = null;
         $('reportar-liquidacion').hidden = true;
+        pintarOrden(null);
         $('mi-brigada').innerHTML = '';
-        linea(
-          $('mi-brigada'),
-          e.estado === 0 ? 'Sin conexión: el estado de la brigada necesita red.' : e.message,
-          'error',
-        );
+        linea($('mi-brigada'), e.estado === 0 ? 'Sin conexión: el estado de la brigada necesita red.' : e.message, 'error');
       },
     );
+  }
+
+  function mostrar() {
+    suscribirPush();
+    return cargar();
+  }
+
+  function ocultar() {
+    clearInterval(cronometro);
   }
 
   function reportarLiquidacion() {
@@ -80,11 +235,10 @@
     boton.disabled = true;
     $('mensaje-brigada').textContent = 'Enviando…';
     BrcApi.post('/brigadas/' + actual.id + '/estado', { estado: 'En_Liquidacion' }).then(
-      function (res) {
+      function () {
         boton.disabled = false;
-        actual = res.datos;
-        pintar();
         $('mensaje-brigada').textContent = '✔ Reportado a la central: brigada en liquidación.';
+        return cargar();
       },
       function (e) {
         boton.disabled = false;
@@ -96,7 +250,8 @@
   function iniciar() {
     $('reportar-liquidacion').addEventListener('click', reportarLiquidacion);
     $('actualizar-brigada').addEventListener('click', cargar);
+    $('confirmar-llegada').addEventListener('click', confirmarLlegada);
   }
 
-  global.BrcBrigada = { iniciar: iniciar, mostrar: cargar };
+  global.BrcBrigada = { iniciar: iniciar, mostrar: mostrar, ocultar: ocultar };
 })(self);

@@ -4,13 +4,14 @@ Skill específica para el agente de UI (frontend). Complementa (no reemplaza) `/
 Por decisión del PO (29/09/2026), **Claude mantiene el frontend temporalmente**; estas reglas valen para
 cualquier agente que lo tome.
 
-## Estado actual (Bolts 1 a 3)
+## Estado actual (Bolts 1 a 4)
 `frontend/app/`: app web instalable (PWA) del **CU-01 "Reportar foco de calor"** para el Guardaparque/Comunario,
 según el wireframe de la Actividad 3 (Figura 7), con pestañas por rol (`PESTANAS_POR_ROL` en `app.js`):
 - **Coordinador:** Reportar, **Panel COED** (Figura 9, Bolt 3), **Evaluación** de riesgo (Figura 8, Bolt 2, con la
   sección de carta municipal) y **Cartas** (contingencia).
 - **Responsable UGR:** Reportar y **Cartas** (adjuntar la carta municipal, Ley 602).
-- **Jefe de Brigada:** Reportar y **Mi brigada** ("En Liquidación / Por finalizar").
+- **Jefe de Brigada:** Reportar y **Mi brigada** ("En Liquidación / Por finalizar"; desde el Bolt 4, orden de
+  salida con cronómetro, llamada al referente, acuse de recibo, CONFIRMAR LLEGADA por GPS y suscripción Web Push).
 - **Guardaparque:** solo Reportar (sin barra de pestañas).
 Las pantallas del COED necesitan conexión; solo el reporte es offline-first.
 
@@ -26,11 +27,12 @@ frontend/
 │   ├── js/foto.js        # compresión en el teléfono a ≤100 KB (o al límite que se pida: carta ≤1 MB)
 │   ├── js/sync.js        # cola offline-first idempotente y catálogo comunal
 │   ├── js/evaluacion.js  # "Evaluación de riesgo" (CU-02, Figura 8; Bolt 2) + validar/rechazar la carta (Bolt 3)
-│   ├── js/panel.js       # Kanban del COED: filtros, contadores, "ver más", mapa SVG esquemático, brigadas (Bolt 3)
+│   ├── js/panel.js       # Kanban del COED: filtros, contadores, "ver más", mapa SVG, brigadas (Bolt 3);
+│   │                     # DESPACHAR / REASIGNAR en 1 clic, insignias de reactivación y de aviso (Bolt 4)
 │   ├── js/cartas.js      # bandeja de la UGR: adjuntar PDF/foto de la carta ≤1 MB (Bolt 3)
 │   ├── js/brigada.js     # vista del jefe de brigada (RF-08, Bolt 3)
 │   ├── js/app.js         # interfaz
-│   └── sw.js             # service worker: la app abre sin red (subir VERSION al cambiar archivos)
+│   └── sw.js             # service worker: la app abre sin red (subir VERSION al cambiar archivos); push y clic de notificación
 ├── nginx.conf            # sirve app/ y pasa /api al backend
 └── pruebas/              # prueba en Chromium real (Playwright): offline, cola, SMS, evaluación, panel, cartas, memoria
 ```
@@ -53,6 +55,19 @@ frontend/
   comunidades del catálogo offline, focos agrupados por cuadrícula de 0,3°). Nada de teselas ni librerías de mapas.
 - **RNF-05:** el panel debe seguir legible con 50+ focos: máximo 15 tarjetas por columna antes de "ver más",
   desplazamiento propio por columna, y sin desplazamiento horizontal a 360 px.
+- **Despacho (RS-03):** siempre con confirmación humana; el UUID del clic se reutiliza en los reintentos y se envía la
+  `version` de la brigada (bloqueo optimista). Un 409 recarga el panel.
+- **Web Push:** si el navegador no lo soporta o se niega el permiso, avisar que las órdenes llegarán por SMS (nunca
+  bloquear). El push real no se prueba en Chromium headless (necesita FCM); lo cubre el e2e con un push falso.
+- **Diseño visual (refactorización con Gemini, 29/09/2026, revisada por Claude):** cabecera fija roja; en el
+  teléfono (<600 px) las pestañas son una barra inferior con ícono (`.icono`) y texto corto (`.texto`); cada rol entra
+  en su pantalla principal (Coordinador → Panel, UGR → Cartas, Jefe → Brigada, Guardaparque → Reportar). Controles
+  segmentados (`.opcion-segmentada`, `.segmentado-opcion`): el input queda oculto (0×0) y el estado se pinta en el
+  `span` (incluido `:disabled`); en las pruebas se hace clic en la etiqueta, no `check()` sobre el input.
+- **Reglas de estilo:** una sola definición por clase (una regla más abajo pisa a la de arriba); nada de animaciones
+  infinitas en listas o en el mapa (RS-01/RS-02: 60+ focos en un teléfono de 1 GB) y respetar
+  `prefers-reduced-motion`; no usar `?v=` en los recursos (el service worker es red-primero: subir `VERSION`).
+  Un cambio "visual" no debe cambiar reglas de negocio (p. ej. la llegada siempre lleva coordenadas GPS).
 - Estados de brigada con sus símbolos de la leyenda: `*` Disponible, `^` En desplazamiento, `#` En combate,
   `~` En liquidación.
 

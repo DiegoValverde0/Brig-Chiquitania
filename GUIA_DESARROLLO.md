@@ -1,8 +1,8 @@
 # Guía de despliegue en desarrollo y pruebas
 
 Pasos para levantar el MVP en una máquina de desarrollo con Docker, cargar datos de ejemplo y verificar todo
-lo construido hasta el **Bolt 3** (Walking Skeleton, captura resiliente y contacto comunal, motor de riesgo y
-gobernanza algorítmica, trámite municipal y estados tácticos).
+lo construido hasta el **Bolt 4** (Walking Skeleton, captura resiliente y contacto comunal, motor de riesgo y
+gobernanza algorítmica, trámite municipal y estados tácticos, despacho y reasignación táctica).
 
 > Todos los comandos se ejecutan desde la raíz del repositorio, salvo que se indique otra carpeta.
 > En Windows, usar PowerShell o Git Bash; los comandos `curl` de ejemplo están escritos para Bash.
@@ -68,15 +68,16 @@ docker compose exec api node dist/seed
 Crea (es idempotente, se puede ejecutar varias veces):
 - 7 comunidades de la Chiquitanía con su referente comunal (datos ficticios, coordenadas aproximadas).
 - 4 brigadas (dos en Santa Cruz de la Sierra, una en San Ignacio de Velasco y una en San José de Chiquitos), todas
-  **Disponibles**. El jefe demo (`demo-jefe-brigada`) lidera la Brigada Departamental 3.
+  **Disponibles** y cada una con su jefe demo con teléfono (sin jefe con teléfono no se despacha, Bolt 4).
 - 2 estancias **ficticias** para probar la exclusión de predios privados del motor de riesgo (Bolt 2).
-- 4 usuarios demo, uno por rol. **Sus códigos son públicos: solo para desarrollo.**
+- 7 usuarios demo. **Sus códigos son públicos: solo para desarrollo.**
 
 | Rol | Código de acceso |
 |---|---|
 | Guardaparque / Comunario | `demo-guardaparque` |
 | Coordinador de Despacho (COED) | `demo-coordinador` |
-| Jefe de Brigada | `demo-jefe-brigada` |
+| Jefe de Brigada (Brigada Departamental 3) | `demo-jefe-brigada` |
+| Jefes de las brigadas 1, 2 y 4 | `demo-jefe-1`, `demo-jefe-2`, `demo-jefe-4` |
 | Responsable UGR Municipal | `demo-ugr` |
 
 ### 2.4 Comandos útiles
@@ -255,6 +256,42 @@ docker compose exec db psql -U chiquitania -d chiquitania_db \
   -c "UPDATE evento_auditoria SET detalle = 'x';"   # debe fallar: registro inmutable (RNF-07)
 ```
 
+### 3.8 Despacho en 1 clic, orden de salida, reactivación y reasignación (Bolt 4)
+
+Actualizar desde el Bolt 3: `docker compose up -d --build` y volver a aplicar la semilla (asigna jefes con
+teléfono a las 4 brigadas). No hace falta borrar la base.
+
+1. **Despacho en 1 clic (RF-10).** Crear un foco cerca de una comunidad y adjuntarle la carta (sección 3.7). En
+   **Panel COED**, su tarjeta de "Nuevo" muestra **DESPACHAR B3 · 118 km** (la brigada sugerida). Tocarlo, confirmar
+   y la tarjeta pasa a "Asignado" con **📨 Aviso enviado (SMS)**. Si falta la carta, el contacto o un jefe con
+   teléfono, el botón aparece desactivado con el motivo (🔒). Tocar dos veces seguidas no crea dos asignaciones.
+2. **Aviso al jefe (RF-11).** En la bandeja de la pasarela simulada (`curl -H "Authorization: Bearer
+   demo-coordinador" http://localhost:3000/api/sms/mensajes`) aparece el SMS `DESPACHO F-… Alto <lat>,<lon> 118km NE. Ref: <referente> <teléfono>` (≤160). Con el navegador del jefe
+   suscrito a notificaciones, llega primero un **push**; si no abre la orden en 3 minutos, sale el SMS.
+3. **Orden de salida (HU-4.2).** Ingresar con el jefe de esa brigada (p. ej. `demo-jefe-brigada` para la B3) →
+   **Mi brigada**: coordenadas, ruta en línea recta, referente con botón **Llamar** y cronómetro. Al abrirla, el
+   panel del coordinador pasa a **✔ Orden leída**. **CONFIRMAR LLEGADA (GPS)** registra la llegada (ΔT).
+4. **Reactivación (decisión 7.2).** Con la brigada "En Liquidación" (botón del jefe), crear otro reporte a menos de
+   2 km del foco: el panel marca el foco controlado como **Posible reactivación**. Abrir su evaluación → **REACTIVAR
+   FOCO** (justificación ≥15): vuelve a "Nuevo", riesgo Alto, **⟳ Reactivado** y primero en la columna.
+5. **Reasignación táctica (HU-4.3).** La tarjeta reactivada ofrece **~ REASIGNAR B3 · 0 km** (la brigada que lo
+   liquidaba): un clic y queda "Asignado". Cualquier foco **Alto** a menos de 30 km de una brigada "En Liquidación"
+   la sugiere primero.
+
+Web Push en desarrollo funciona en `http://localhost` (Chrome o Firefox de escritorio o Android con la API en la
+misma máquina); en el VPS necesita HTTPS. Las claves VAPID de desarrollo se generan solas en el volumen
+`evidencias` (`almacen/vapid-dev.json`).
+
+Por API (curl), con el mismo UUID el reintento no duplica:
+
+```bash
+C="Authorization: Bearer demo-coordinador"; ID=<id del foco>; A=$(node -e 'console.log(crypto.randomUUID())')
+curl -s "http://localhost:3000/api/incidentes/$ID/brigadas-sugeridas" -H "$C"   # version de cada brigada
+curl -s -X POST "http://localhost:3000/api/incidentes/$ID/asignaciones" -H "$C" -H 'Content-Type: application/json' \
+  -d "{\"id\":\"$A\",\"brigadaId\":\"00000000-0000-4000-8000-000000000203\",\"versionBrigada\":0}" -w ' %{http_code}\n'
+# 201; repetir el mismo comando → 200 con la misma asignación; con otra versión → 409
+```
+
 ---
 
 ## 4. Pruebas automatizadas
@@ -269,11 +306,11 @@ docker compose up -d db          # basta con la base de datos
 cd backend
 npm ci
 npm test                         # unitarias (sin BD): cifrado, codec SMS, geografía, motor, validación, panel, estados
-npm run test:e2e                 # Bolts 0 a 3 contra PostgreSQL
+npm run test:e2e                 # Bolts 0 a 4 contra PostgreSQL (incluye un servicio de push falso local)
 cd ..
 ```
 
-Resultado esperado al cierre del Bolt 3: **43 unitarias** y **64 e2e** en verde.
+Resultado esperado al cierre del Bolt 4: **62 unitarias** y **80 e2e** en verde.
 
 ### 4.2 App web en el navegador (Playwright)
 
@@ -292,10 +329,11 @@ APP=http://localhost:8080 npm test
 cd ../..
 ```
 
-Resultado esperado: **13/13 pasos OK** (inicio de sesión, reporte GPS con foto, cola sin conexión, recarga sin
+Resultado esperado: **16/16 pasos OK** (inicio de sesión, reporte GPS con foto, cola sin conexión, recarga sin
 red, sincronización, SMS simulado, evaluación y reclasificación del coordinador; Bolt 3: 60 focos simulados, jefe
 de brigada "En Liquidación", carta de la UGR, panel COED a 1366 px con filtros, validación y rechazo, panel a
-360 px; y memoria). Las capturas quedan en `frontend/pruebas/capturas/`.
+360 px; Bolt 4: despacho en 1 clic con doble clic, orden de salida leída y llegada por GPS, reactivación y
+reasignación en 1 clic; y memoria). Las capturas quedan en `frontend/pruebas/capturas/`.
 
 ### 4.3 Desarrollo de la API sin Docker (opcional)
 
@@ -322,6 +360,9 @@ npm run start:dev                # API en :3000 y, con FRONTEND_DIR, también la
 | Desde un teléfono en la misma red el GPS no funciona | El navegador solo permite geolocalización en `localhost` o con **HTTPS**. Para pruebas, usar el reporte a distancia o configurar TLS. |
 | Cambios del frontend no se ven | Caché del service worker: *Unregister* y `Ctrl+Shift+R` (3.3). |
 | La prueba del navegador no encuentra Chromium | Definir la variable `CHROMIUM` con la ruta al ejecutable (4.2). |
+| Windows/PowerShell: `sh : El término 'sh' no se reconoce` | Ejecutar los scripts `.sh` desde **Git Bash** (`bash backend/scripts/flujo-e2e.sh`) o WSL. |
+| Windows/PowerShell: `curl` pide "Advertencia de seguridad" | En PowerShell `curl` es `Invoke-WebRequest`: usar `curl.exe http://localhost:3000/api/health` (el `curl` real). |
+| La semilla muestra `DeprecationWarning: Calling client.query() when the client is already executing a query` | Viene de TypeORM al sincronizar el esquema (`DB_SYNCHRONIZE=true`, solo desarrollo); es inofensiva y desaparece con las migraciones (Release 1.0). |
 
 ---
 
@@ -335,8 +376,13 @@ CLAVE_CIFRADO=<salida de: openssl rand -base64 32>   # guardarla en lugar seguro
 SMS_WEBHOOK_SECRETO=<cadena larga aleatoria>
 DB_PASSWORD=<clave robusta>
 SMS_NUMERO_CENTRAL=<número de la central>
+# Web Push (Bolt 4): generar UNA vez con `docker compose run --rm api node dist/generar-vapid mailto:<correo COED>`
+VAPID_PUBLICA=<...>
+VAPID_PRIVADA=<...>
+VAPID_CONTACTO=mailto:<correo COED>
 ```
 
 En producción la semilla **no** crea usuarios demo. El primer coordinador se crea con
-`docker compose exec api node dist/crear-usuario "Nombre" Coordinador`. Además hace falta HTTPS delante del
-servicio `web` para que funcione la geolocalización.
+`docker compose exec api node dist/crear-usuario "Nombre" Coordinador`. Los jefes de brigada se crean con
+teléfono (`POST /api/usuarios`) y se asignan a su brigada con `PUT /api/brigadas/:id/jefe`: sin jefe con teléfono
+no se despacha. Además hace falta HTTPS delante del servicio `web` para la geolocalización y para Web Push.

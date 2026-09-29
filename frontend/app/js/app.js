@@ -29,6 +29,8 @@
     return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
   }
 
+  self.BrcUuid = nuevoUuid;
+
   function texto(el, valor) {
     el.textContent = valor;
     return el;
@@ -126,7 +128,17 @@
     var usuario = BrcAjustes.obtener('usuario', null);
     texto($('usuario'), usuario ? usuario.nombre + ' · ' + usuario.rol : '');
     pintarPestanas(usuario);
-    elegirPestana('reportar');
+    // Bolt 4: la notificación de despacho abre la app en "Mi brigada" (./?pestana=brigada).
+    var pedida = /[?&]pestana=(\w+)/.exec(location.search);
+    var visibles = (usuario && PESTANAS_POR_ROL[usuario.rol]) || ['reportar'];
+    // Cada rol entra en su pantalla principal (el guardaparque, en "Reportar").
+    var pestanaDefecto = 'reportar';
+    if (usuario) {
+      if (usuario.rol === 'Coordinador') pestanaDefecto = 'panel';
+      else if (usuario.rol === 'ResponsableUGR') pestanaDefecto = 'cartas';
+      else if (usuario.rol === 'JefeBrigada') pestanaDefecto = 'brigada';
+    }
+    elegirPestana(pedida && visibles.indexOf(pedida[1]) >= 0 ? pedida[1] : pestanaDefecto);
     mostrar('principal');
     cargarCatalogo();
     BrcSync.actualizarCatalogo();

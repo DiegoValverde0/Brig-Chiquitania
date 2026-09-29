@@ -61,6 +61,18 @@ historial append-only (`sh backend/scripts/flujo-e2e.sh` lo recorre con curl).
 - Estados tácticos de brigada (4): el jefe reporta "En Liquidación / Por finalizar" (su foco pasa a
   En Liquidación) y el coordinador libera la brigada (Disponible).
 
+**Bolt 4 — Despacho y reasignación táctica:**
+- Despacho en 1 clic desde el panel (con confirmación humana, RS-03): el UUID del clic hace idempotente el
+  reintento y la versión de la brigada (bloqueo optimista) impide el doble despacho.
+- Aviso al jefe de brigada: Web Push (VAPID + `aes128gcm`, sin librerías) y SMS de respaldo ≤160 caracteres si no
+  tiene notificaciones, si el push falla o si no abre la orden en 3 minutos. Coordenadas, ruta en línea recta y
+  contacto comunal. El panel muestra 📨 enviado, ✔ leído o ⚠ fallido.
+- Reactivación de focos: el coordinador devuelve a "Nuevo" (riesgo Alto, primero en su columna) un foco controlado
+  que vuelve a ser riesgoso; un reporte nuevo a menos de 2 km lo sugiere.
+- Reasignación táctica: una brigada "En Liquidación" a menos de 30 km de un foco Alto se sugiere primero y se
+  despacha en 1 clic. Sin jefe con teléfono no se despacha.
+- "Mi brigada": orden de salida con cronómetro, botón para llamar al referente y confirmación de llegada por GPS.
+
 ## API
 
 Todas las rutas exigen `Authorization: Bearer <token>` salvo `/api/health` y el webhook SMS.
@@ -82,7 +94,8 @@ Todas las rutas exigen `Authorization: Bearer <token>` salvo `/api/health` y el 
 | `GET` | `/api/sms/mensajes` | Coordinador | Bandeja de SMS entrantes y salientes |
 | `GET` | `/api/panel` | Coordinador | Kanban: incidentes activos por columna, contadores y brigadas; filtros `?carta=con\|sin\|por_validar`, `?riesgo=Alto,Medio`, `?comunidad=` |
 | `GET` | `/api/brigadas` | Coordinador | Brigadas con estado táctico, jefe y foco asignado |
-| `GET` | `/api/brigadas/mia` | Jefe de Brigada | La brigada que lidera el usuario |
+| `GET` | `/api/brigadas/mia` | Jefe de Brigada | La brigada que lidera el usuario y su orden de salida vigente |
+| `PUT` | `/api/brigadas/:id/jefe` | Coordinador | Asigna el jefe de la brigada `{usuarioId}` (sin jefe con teléfono no se despacha) |
 | `POST` | `/api/brigadas/:id/estado` | Jefe de Brigada, Coordinador | `{estado: "En_Liquidacion"}` (jefe de esa brigada, desde En Combate) o `{estado: "Disponible"}` (coordinador, desde En Liquidación) |
 | `GET` | `/api/incidentes/:id/evaluacion` | Coordinador | Riesgo vigente, origen, justificación y factores del motor, reclasificaciones |
 | `POST` | `/api/incidentes/:id/reclasificacion` | Coordinador | Reclasificación manual `{nivelRiesgo, justificacion}` (≥15 caracteres) |
@@ -92,8 +105,12 @@ Todas las rutas exigen `Authorization: Bearer <token>` salvo `/api/health` y el 
 | `GET` | `/api/incidentes/:id/carta-municipal/archivo` | UGR, Coordinador | Documento descifrado |
 | `POST` | `/api/incidentes/:id/carta-municipal/verificacion` | Coordinador | `{resultado: "Validada" \| "Rechazada", motivo}` (motivo ≥15 caracteres al rechazar) |
 | `GET` | `/api/cartas/pendientes` | UGR, Coordinador | Focos activos sin carta o con carta rechazada |
-| `GET` | `/api/incidentes/:id/brigadas-sugeridas` | Coordinador | Brigadas Disponibles por cercanía (solo riesgo Alto/Medio) |
-| `POST` | `/api/incidentes/:id/asignaciones` | Coordinador | Despacho confirmado (exige carta no rechazada y contacto comunal) |
+| `GET` | `/api/incidentes/:id/brigadas-sugeridas` | Coordinador | Candidatas (solo riesgo Alto/Medio): primero las En Liquidación a <30 km de un foco Alto (reasignación), luego las Disponibles por cercanía; con `version` y `despachable` |
+| `POST` | `/api/incidentes/:id/asignaciones` | Coordinador | Despacho en 1 clic `{id?, brigadaId, versionBrigada?}`: 201 nuevo / 200 reintento del mismo `id` / 409 si la brigada cambió. Exige carta no rechazada, contacto comunal y jefe con teléfono. Avisa al jefe (push o SMS) |
+| `POST` | `/api/incidentes/:id/reactivacion` | Coordinador | Reactiva un foco En Liquidación `{justificacion}` (≥15): vuelve a Nuevo, riesgo Alto |
+| `POST` | `/api/asignaciones/:id/leida` | Jefe de Brigada (de esa brigada) | Acuse de recibo de la orden (evita el SMS de respaldo) |
+| `GET` | `/api/notificaciones/clave-publica` | cualquiera | Clave VAPID para suscribir el navegador |
+| `POST` / `DELETE` | `/api/notificaciones/suscripcion` | Jefe de Brigada | Suscripción Web Push del navegador (`PushSubscription`) |
 | `POST` | `/api/asignaciones/:id/llegada` | Jefe de Brigada, Coordinador | Confirmación de llegada (write-once) |
 | `GET` | `/api/incidentes/:id/tiempo-despacho` | Coordinador | ΔT, % de ahorro y cumplimiento de la meta del 30 % |
 | `GET` | `/api/incidentes/:id/historial` | Coordinador | Historial append-only: quién, cuándo y motivo |
@@ -107,6 +124,7 @@ Formato SMS (`BRC1`, texto plano ≤160 caracteres):
 
 - `backend/`: `npm test` (unitarias) y `npm run test:e2e` (requiere PostgreSQL; crea y vacía la BD `chiquitania_test`).
 - `frontend/pruebas/`: `npm ci && APP=http://localhost:8080 npm test` recorre la app en Chromium (sin conexión,
-  cola, SMS simulado, evaluación de riesgo, panel COED con 60 focos, cartas y estados de brigada, memoria).
+  cola, SMS simulado, evaluación de riesgo, panel COED con 60 focos, cartas y estados de brigada, despacho en
+  1 clic, orden de salida, reactivación y reasignación, memoria).
   Requiere Chromium (`CHROMIUM=/ruta/al/binario`) y una BD recién sembrada (`npm run seed` deja las brigadas
   Disponibles).
