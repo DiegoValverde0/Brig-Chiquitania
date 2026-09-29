@@ -25,6 +25,7 @@ function tarjeta(parcial: Partial<TarjetaPanel>): TarjetaPanel {
     sugerencia: null,
     bloqueoDespacho: null,
     notificacion: null,
+    porcentajeControl: null,
     ...parcial,
   };
 }

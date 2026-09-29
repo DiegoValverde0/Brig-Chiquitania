@@ -1,6 +1,6 @@
 /**
  * Eventos auditados fuera del ciclo de vida del incidente: trámite municipal y estados tácticos (Bolt 3);
- * reasignación táctica, jefe de brigada y notificaciones (Bolt 4).
+ * reasignación táctica, jefe de brigada y notificaciones (Bolt 4); bitácora e informe de cierre (Bolt 5).
  */
 export enum TipoEventoAuditoria {
   CartaAdjuntada = 'CartaAdjuntada',
@@ -12,4 +12,6 @@ export enum TipoEventoAuditoria {
   BrigadaJefe = 'BrigadaJefe',
   NotificacionEnviada = 'NotificacionEnviada',
   NotificacionFallida = 'NotificacionFallida',
+  BitacoraRegistrada = 'BitacoraRegistrada',
+  IncidenteCerrado = 'IncidenteCerrado',
 }

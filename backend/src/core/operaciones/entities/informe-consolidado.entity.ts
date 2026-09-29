@@ -1,20 +1,47 @@
-import { Column, Entity, JoinColumn, OneToOne, Relation } from 'typeorm';
-import { EntidadBase } from '../../../common/entidad-base';
-import { AsignacionDespacho } from '../../despacho/entities/asignacion-despacho.entity';
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, OneToOne, PrimaryGeneratedColumn, Relation } from 'typeorm';
+import { Usuario } from '../../seguridad/entities/usuario.entity';
+import { Incidente } from '../../triage/entities/incidente.entity';
+import { ResultadoCierre } from '../../triage/enums/resultado-cierre.enum';
 
-/** Informe de cierre de una operación (base para la liquidación de la brigada). */
+/**
+ * UML `InformeConsolidado` (Bolt 5, HU-5.4, RF-13): compila las bitácoras y el ciclo del incidente en un PDF
+ * inmutable (RNF-07: la BD rechaza UPDATE y DELETE). Incidente 1 — 0..1.
+ */
 @Entity('informe_consolidado')
-export class InformeConsolidado extends EntidadBase {
-  @Column({ type: 'text' })
-  resumen: string;
+export class InformeConsolidado {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
-  @Column({ name: 'fecha_cierre', type: 'timestamptz' })
-  fechaCierre: Date;
+  @CreateDateColumn({ name: 'fecha_generacion', type: 'timestamptz' })
+  fechaGeneracion: Date;
 
-  @Column({ name: 'hectareas_afectadas', type: 'numeric', precision: 10, scale: 2, nullable: true })
-  hectareasAfectadas: string | null;
+  /** UML `contenidoPDF`: ruta del PDF cifrado en el almacén de archivos. */
+  @Column({ name: 'contenido_pdf', type: 'varchar', length: 200 })
+  contenidoPDF: string;
 
-  @OneToOne(() => AsignacionDespacho, { nullable: false })
-  @JoinColumn({ name: 'asignacion_id' })
-  asignacion: Relation<AsignacionDespacho>;
+  /** Integridad del documento entregado [inferencia]. */
+  @Column({ type: 'char', length: 64 })
+  sha256: string;
+
+  @Column({ name: 'peso_kb', type: 'real' })
+  pesoKB: number;
+
+  /** ΔT en minutos (HU-5.3); null si nunca hubo llegada (p. ej. falso positivo descartado sin despacho). */
+  @Column({ name: 'tiempo_total_despacho', type: 'int', nullable: true })
+  tiempoTotalDespacho: number | null;
+
+  @Column({ name: 'justificacion_falso_positivo', type: 'text', nullable: true })
+  justificacionFalsoPositivo: string | null;
+
+  /** Copia del resultado del cierre para listar informes sin descifrar el PDF [inferencia]. */
+  @Column({ type: 'enum', enum: ResultadoCierre })
+  resultado: ResultadoCierre;
+
+  @OneToOne(() => Incidente, { nullable: false })
+  @JoinColumn({ name: 'incidente_id' })
+  incidente: Relation<Incidente>;
+
+  @ManyToOne(() => Usuario, { nullable: true })
+  @JoinColumn({ name: 'usuario_id' })
+  usuario: Relation<Usuario> | null;
 }

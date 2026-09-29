@@ -61,6 +61,31 @@ describe('codec SMS BRC1 (HU-1.3, RNF-02)', () => {
     }
   });
 
+  it('Bolt 5: la bitácora de turno cabe en un SMS (≈80 caracteres) y se decodifica igual', () => {
+    const bitacora: ReporteSms = {
+      tipo: 'B',
+      incidenteId: randomUUID(),
+      id: randomUUID(),
+      aguaSuficiente: false,
+      combustibleOk: true,
+      herramientasOperativas: true,
+      kmFajaMitigados: 12.34,
+      porcentajeControl: 70,
+      fecha,
+    };
+    const texto = codificarReporte(bitacora);
+    expect(texto).toMatch(/^BRC1 B [\w-]{22} [\w-]{22} C O 1 12\.3 70 [0-9a-z]+$/);
+    expect(texto.length).toBeLessThanOrEqual(90);
+    expect(decodificarReporte(texto)).toEqual({ ...bitacora, kmFajaMitigados: 12.3 });
+    expect(decodificarReporte(texto.replace(' C O 1 ', ' c o 1 '))).toMatchObject({ aguaSuficiente: false, combustibleOk: true });
+    expect(() => decodificarReporte(texto.replace(' C O 1 ', ' X O 1 '))).toThrow(/agua/);
+    expect(() => decodificarReporte(texto.replace(' C O 1 ', ' C O 2 '))).toThrow(/herramientas/);
+    for (let i = 0; i < 20; i++) {
+      const r = { ...bitacora, id: randomUUID(), kmFajaMitigados: Math.random() * 50, porcentajeControl: Math.round(Math.random() * 100), aguaSuficiente: i % 2 === 0 };
+      expect(smsApp.codificarReporte(r)).toBe(codificarReporte(r));
+    }
+  });
+
   it('las respuestas salientes caben en un solo segmento GSM-7', () => {
     const plano = smsPlano('BRC1 OK 1234abcd Riesgo Alto (San José de Chiquitos). Contacto: Ñusta Peñaranda ΔT'.repeat(3));
     expect(plano.length).toBeLessThanOrEqual(LARGO_MAXIMO_SMS);

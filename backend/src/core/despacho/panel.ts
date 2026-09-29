@@ -48,6 +48,8 @@ export interface TarjetaPanel {
   bloqueoDespacho: string | null;
   /** Bolt 4: estado del aviso al jefe de brigada (última notificación de la asignación activa). */
   notificacion: ResumenNotificacion | null;
+  /** Bolt 5: último % de control de la bitácora (tarjetas En atención / En Liquidación). */
+  porcentajeControl: number | null;
 }
 
 export interface ResumenNotificacion {

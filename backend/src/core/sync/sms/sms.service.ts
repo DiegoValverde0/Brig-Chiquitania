@@ -1,5 +1,7 @@
 import { HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { BitacoraService, VistaBitacora } from '../../operaciones/bitacora.service';
+import { NivelAgua, NivelCombustible } from '../../operaciones/enums/nivel-bitacora.enum';
 import { ReporteService, VistaReporte } from '../../reporte/reporte.service';
 import { TipoReporte } from '../../reporte/enums/tipo-reporte.enum';
 import { Usuario } from '../../seguridad/entities/usuario.entity';
@@ -16,6 +18,8 @@ export interface ResultadoSmsEntrante {
   motivo: string | null;
   /** Texto de la respuesta enviada al remitente. */
   respuesta: string;
+  /** Bolt 5: presente si el SMS era una bitácora de turno (`BRC1 B`). */
+  bitacora?: VistaBitacora | null;
 }
 
 /**
@@ -30,6 +34,7 @@ export class SmsService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly reportes: ReporteService,
+    private readonly bitacoras: BitacoraService,
     @Inject(PasarelaSms) private readonly pasarela: PasarelaSms,
   ) {}
 
@@ -42,6 +47,8 @@ export class SmsService {
       if (!(error instanceof ErrorSms)) throw error;
       return this.rechazar(numero, texto, error.message, null);
     }
+
+    if (sms.tipo === 'B') return this.recibirBitacora(numero, texto, sms, usuario);
 
     const cuerpo =
       sms.tipo === 'G'
@@ -76,6 +83,48 @@ export class SmsService {
     } catch (error) {
       if (!(error instanceof HttpException)) throw error;
       return this.rechazar(numero, texto, mensajeDe(error), sms.id);
+    }
+  }
+
+  /**
+   * Bolt 5 (HU-5.2, decisión 7.5): bitácora de turno por SMS. El remitente debe ser el jefe de la brigada (se
+   * reconoce por su teléfono registrado); mismas reglas e idempotencia que por datos.
+   */
+  private async recibirBitacora(
+    numero: string,
+    texto: string,
+    sms: Extract<ReporteSms, { tipo: 'B' }>,
+    usuario: Usuario | null,
+  ): Promise<ResultadoSmsEntrante> {
+    if (!usuario) return this.rechazar(numero, texto, 'Numero no registrado como jefe de brigada', sms.incidenteId);
+    try {
+      const { bitacora, duplicada } = await this.bitacoras.registrar(
+        sms.incidenteId,
+        {
+          id: sms.id,
+          fecha: sms.fecha.toISOString(),
+          nivelAgua: sms.aguaSuficiente ? NivelAgua.Suficiente : NivelAgua.Critica,
+          nivelCombustible: sms.combustibleOk ? NivelCombustible.OK : NivelCombustible.Reserva,
+          herramientasOperativas: sms.herramientasOperativas,
+          kmFajaMitigados: sms.kmFajaMitigados,
+          porcentajeControl: sms.porcentajeControl,
+        },
+        usuario,
+        'SMS',
+      );
+      await this.registrar(DireccionSms.Entrante, numero, texto, EstadoSms.Procesado, {
+        detalle: duplicada ? 'Bitacora ya registrada (reintento)' : 'Bitacora registrada',
+        incidenteId: sms.incidenteId,
+      });
+      const respuesta = await this.enviar(
+        numero,
+        `BRC1 OK B ${sms.id.slice(0, 8)} Control ${bitacora.porcentajeControl}% registrado`,
+        sms.incidenteId,
+      );
+      return { estado: EstadoSms.Procesado, reporte: null, bitacora, duplicado: duplicada, motivo: null, respuesta };
+    } catch (error) {
+      if (!(error instanceof HttpException)) throw error;
+      return this.rechazar(numero, texto, mensajeDe(error), sms.incidenteId);
     }
   }
 

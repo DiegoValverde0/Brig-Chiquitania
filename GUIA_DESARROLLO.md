@@ -1,8 +1,9 @@
 # Guía de despliegue en desarrollo y pruebas
 
 Pasos para levantar el MVP en una máquina de desarrollo con Docker, cargar datos de ejemplo y verificar todo
-lo construido hasta el **Bolt 4** (Walking Skeleton, captura resiliente y contacto comunal, motor de riesgo y
-gobernanza algorítmica, trámite municipal y estados tácticos, despacho y reasignación táctica).
+lo construido hasta el **Bolt 5** (Walking Skeleton, captura resiliente y contacto comunal, motor de riesgo y
+gobernanza algorítmica, trámite municipal y estados tácticos, despacho y reasignación táctica, bitácora y cierre
+institucional).
 
 > Todos los comandos se ejecutan desde la raíz del repositorio, salvo que se indique otra carpeta.
 > En Windows, usar PowerShell o Git Bash; los comandos `curl` de ejemplo están escritos para Bash.
@@ -292,6 +293,34 @@ curl -s -X POST "http://localhost:3000/api/incidentes/$ID/asignaciones" -H "$C" 
 # 201; repetir el mismo comando → 200 con la misma asignación; con otra versión → 409
 ```
 
+### 3.9 Bitácora de turno, cierre e informe consolidado (Bolt 5)
+
+Actualizar desde el Bolt 4: `docker compose up -d --build`. No hace falta borrar la base (las tablas `bitacora` e
+`informe_consolidado` del Bolt 0 estaban vacías y se reemplazan por las del UML).
+
+1. **Foco en atención.** Despachar una brigada a un foco con carta y confirmar la llegada (3.8, o el script
+   `backend/scripts/flujo-e2e.sh`, que ahora recorre también la bitácora y el cierre).
+2. **Bitácora sin conexión (HU-5.2).** Ingresar con el jefe de esa brigada (entra directo a **Mi brigada**). Bajo la
+   orden aparece **Bitácora de turno**: tocar lo que cambió (agua, combustible, herramientas, **−/+** de km y de %
+   de control) y **GUARDAR BITÁCORA**. En DevTools → *Network* → *Offline*: queda **En cola** con el SMS `BRC1 B`
+   visible; al recargar sin red sigue ahí (la orden también); al volver la red pasa a **Enviada** sola. La siguiente
+   bitácora se precarga con la anterior.
+3. **Panel.** La tarjeta del foco muestra **📈 % control**.
+4. **Cierre en 1 clic (HU-5.4).** Coordinador → abrir el foco → **Cerrar incidente**:
+   - **Falso positivo** exige 15 caracteres de justificación (el botón queda bloqueado hasta cumplirlos);
+   - **Controlado** o **Extendido** solo después de la llegada.
+   **CERRAR Y GENERAR INFORME** descarga el PDF; la brigada queda Disponible. El detalle muestra el SHA-256.
+5. **Informes.** Pestaña **Informes** (Coordinador y UGR): focos cerrados, resumen del KPI (ΔT promedio y % que
+   cumple la meta del 30 %) y descarga de cada PDF.
+
+Inmutabilidad (RNF-07):
+
+```bash
+docker compose exec db psql -U chiquitania -d chiquitania_db \
+  -c "UPDATE bitacora SET porcentaje_control = 99;" \
+  -c "UPDATE informe_consolidado SET sha256 = repeat('0', 64);"   # ambos deben fallar
+```
+
 ---
 
 ## 4. Pruebas automatizadas
@@ -306,11 +335,11 @@ docker compose up -d db          # basta con la base de datos
 cd backend
 npm ci
 npm test                         # unitarias (sin BD): cifrado, codec SMS, geografía, motor, validación, panel, estados
-npm run test:e2e                 # Bolts 0 a 4 contra PostgreSQL (incluye un servicio de push falso local)
+npm run test:e2e                 # Bolts 0 a 5 contra PostgreSQL (incluye un servicio de push falso local)
 cd ..
 ```
 
-Resultado esperado al cierre del Bolt 4: **62 unitarias** y **80 e2e** en verde.
+Resultado esperado al cierre del Bolt 5: **76 unitarias** y **94 e2e** en verde.
 
 ### 4.2 App web en el navegador (Playwright)
 
@@ -329,11 +358,12 @@ APP=http://localhost:8080 npm test
 cd ../..
 ```
 
-Resultado esperado: **16/16 pasos OK** (inicio de sesión, reporte GPS con foto, cola sin conexión, recarga sin
+Resultado esperado: **18/18 pasos OK** (inicio de sesión, reporte GPS con foto, cola sin conexión, recarga sin
 red, sincronización, SMS simulado, evaluación y reclasificación del coordinador; Bolt 3: 60 focos simulados, jefe
 de brigada "En Liquidación", carta de la UGR, panel COED a 1366 px con filtros, validación y rechazo, panel a
 360 px; Bolt 4: despacho en 1 clic con doble clic, orden de salida leída y llegada por GPS, reactivación y
-reasignación en 1 clic; y memoria). Las capturas quedan en `frontend/pruebas/capturas/`.
+reasignación en 1 clic; Bolt 5: bitácora sin conexión que se sincroniza sola y cierre con descarga del PDF; y
+memoria). Las capturas quedan en `frontend/pruebas/capturas/`.
 
 ### 4.3 Desarrollo de la API sin Docker (opcional)
 

@@ -3,6 +3,7 @@
  * teléfono, así que reintentar nunca duplica) y tolerante a cortes. Nunca borra un reporte hasta que el
  * servidor lo confirmó. La foto se envía después del reporte, por separado, para que la alerta no espere a
  * la imagen (HU-1.1: "sin detener el flujo de la alerta").
+ * Bolt 5: la misma cola envía las bitácoras de turno (HU-5.2): primero los reportes, después las bitácoras.
  */
 (function (global) {
   'use strict';
@@ -46,11 +47,53 @@
       });
   }
 
-  /** Recorre la cola; devuelve cuántos reportes quedaron confirmados en esta pasada. */
+  /** Envía una bitácora guardada en el teléfono. El UUID del teléfono hace idempotente el reintento (200). */
+  function enviarBitacora(b) {
+    return BrcApi.post('/incidentes/' + b.incidenteId + '/bitacoras', b.cuerpo).then(function (res) {
+      return BrcAlmacen.actualizarBitacora(b.id, { estado: 'enviada', canal: b.canal || 'App', respuesta: res.datos, error: null });
+    });
+  }
+
+  /** Recorre una cola en orden (los más antiguos primero); se detiene sin red y deja visibles los rechazos. */
+  function recorrer(lista, enviar, marcarError, alConfirmar) {
+    var pendientes = lista
+      .filter(function (r) {
+        return r.estado === 'pendiente';
+      })
+      .reverse();
+    var cadena = Promise.resolve();
+    var detener = false;
+    pendientes.forEach(function (r) {
+      cadena = cadena.then(function () {
+        if (detener) return null;
+        return enviar(r).then(alConfirmar, function (e) {
+          if (e.estado === 0 || e.estado >= 500 || e.estado === 429) {
+            detener = true; // sin red o servidor caído: se reintenta más tarde
+            return null;
+          }
+          if (e.estado === 401) {
+            detener = true;
+            BrcAjustes.fijar('sesionVencida', true);
+            notificar();
+            return null;
+          }
+          // 4xx de validación: no se puede aceptar tal cual; se deja visible con el motivo.
+          return marcarError(r.id, e.message).then(notificar);
+        });
+      });
+    });
+    return cadena;
+  }
+
+  /** Recorre las colas; devuelve cuántos registros quedaron confirmados en esta pasada. */
   function sincronizar() {
     if (enCurso || !hayDatos() || !BrcAjustes.obtener('token', null)) return Promise.resolve(0);
     enCurso = true;
     var confirmados = 0;
+    var confirmar = function () {
+      confirmados++;
+      notificar();
+    };
     return BrcAlmacen.reportes()
       .then(function (lista) {
         var pendientes = lista
@@ -86,6 +129,14 @@
           });
         });
         return cadena;
+      })
+      .then(function () {
+        return BrcAlmacen.bitacoras();
+      })
+      .then(function (lista) {
+        return recorrer(lista, enviarBitacora, function (id, motivo) {
+          return BrcAlmacen.actualizarBitacora(id, { estado: 'error', error: motivo });
+        }, confirmar);
       })
       .then(
         function () {
