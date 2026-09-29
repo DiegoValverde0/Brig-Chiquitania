@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DataSource } from 'typeorm';
 import { BRIGADAS } from '../src/semilla';
-import { Cliente, crearAppPruebas, TOKENS } from './app-pruebas';
+import { Cliente, crearAppPruebas, pdfDePrueba, subirCarta, TOKENS } from './app-pruebas';
 
 /**
  * DoD del Bolt 0: un foco reportado con GPS recorre Nuevo → riesgo → panel → brigada sugerida →
@@ -78,10 +78,12 @@ describe('Flujo E2E del Walking Skeleton (Bolt 0)', () => {
       expect(res.body.message).toMatch(/Ley N\.º 602/);
     });
 
-    it('registra la carta municipal (0..1: una segunda carta es rechazada)', async () => {
-      const carta = { archivoDigital: 'cartas/concepcion-001.pdf', fechaEmision: '2026-09-28' };
-      await http().post(`/api/incidentes/${id}/carta-municipal`).send(carta).expect(201);
-      await http().post(`/api/incidentes/${id}/carta-municipal`).send(carta).expect(409);
+    it('registra la carta municipal (0..1: el reenvío es idempotente y otra carta distinta es rechazada)', async () => {
+      const carta = pdfDePrueba('concepcion-001');
+      const res = await subirCarta(http(), id, carta).expect(201);
+      expect(res.body).toMatchObject({ estadoTramite: 'Recibida', estado: 'por_validar', habilitaDespacho: true });
+      await subirCarta(http(), id, carta).expect(200);
+      await subirCarta(http(), id, pdfDePrueba('otra')).expect(409);
     });
 
     it('RS-03: el coordinador confirma el despacho; foco "Asignado" y brigada "En Desplazamiento"', async () => {
@@ -184,10 +186,7 @@ describe('Flujo E2E del Walking Skeleton (Bolt 0)', () => {
       const id = randomUUID();
       const res = await reportar({ id, latitud: -15.51, longitud: -61.5, precisionMetros: 5 }).expect(201);
       expect(res.body).toMatchObject({ nivelRiesgo: 'Alto', comunidad: { id: comunidadId } });
-      await http()
-        .post(`/api/incidentes/${id}/carta-municipal`)
-        .send({ archivoDigital: 'cartas/x.pdf', fechaEmision: '2026-09-28' })
-        .expect(201);
+      await subirCarta(http(), id).expect(201);
       const despacho = await http()
         .post(`/api/incidentes/${id}/asignaciones`)
         .send({ brigadaId: BRIGADAS[0].id })
@@ -198,10 +197,7 @@ describe('Flujo E2E del Walking Skeleton (Bolt 0)', () => {
     it('una brigada que no está Disponible no se puede despachar', async () => {
       const id = randomUUID();
       await reportar({ id, ...cercaDeConcepcion }).expect(201);
-      await http()
-        .post(`/api/incidentes/${id}/carta-municipal`)
-        .send({ archivoDigital: 'cartas/y.pdf', fechaEmision: '2026-09-28' })
-        .expect(201);
+      await subirCarta(http(), id).expect(201);
       await http()
         .post(`/api/incidentes/${id}/asignaciones`)
         .send({ brigadaId: brigadaSanIgnacio })

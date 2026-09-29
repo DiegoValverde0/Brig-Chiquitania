@@ -2,19 +2,21 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { FiltroErroresCuerpo } from './common/filtro-errores-cuerpo';
-import { PESO_MAXIMO_BYTES, TIPOS_IMAGEN } from './core/reporte/evidencia.service';
+import { TIPOS_DOCUMENTO } from './common/almacen-archivos.service';
+import { PESO_MAXIMO_CARTA } from './core/triage/carta-municipal.service';
 
 /**
  * Configuración HTTP común a `main.ts` y a las pruebas e2e.
  * - JSON acotado a 16 KB: los reportes pesan <2 KB (RS-02); rechazar cuerpos grandes protege el VPS.
- * - Fotos como binario crudo, hasta 100 KB (RF-03), sin base64 (un tercio menos de datos en 2G).
+ * - Archivos como binario crudo, sin base64 (un tercio menos de datos en 2G): el parser admite hasta el mayor
+ *   límite (carta municipal, 1 MB) y cada servicio aplica el suyo (fotos del reporte: 100 KB, RF-03).
  * - Si `FRONTEND_DIR` apunta a la app web, la API también la sirve (desarrollo y pruebas; en el VPS la sirve nginx).
  */
 export function configurarApp(app: NestExpressApplication): void {
   app.setGlobalPrefix('api');
   app.disable('x-powered-by');
   app.useBodyParser('json', { limit: '16kb' });
-  app.useBodyParser('raw', { type: TIPOS_IMAGEN, limit: PESO_MAXIMO_BYTES });
+  app.useBodyParser('raw', { type: TIPOS_DOCUMENTO, limit: PESO_MAXIMO_CARTA });
   app.useGlobalFilters(new FiltroErroresCuerpo(app.getHttpAdapter()));
   app.enableShutdownHooks();
 

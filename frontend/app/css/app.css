@@ -224,6 +224,13 @@ legend {
   min-height: 1em;
 }
 
+#error-panel:empty,
+#error-cartas:empty,
+#error-evaluacion:empty {
+  min-height: 0;
+  margin: 0;
+}
+
 .insignia {
   display: inline-block;
   padding: 3px 10px;
@@ -448,4 +455,370 @@ textarea {
 
 .historial .reporte p {
   margin: 2px 0;
+}
+
+/* ---------- Bolt 3: panel COED (Figura 9), cartas municipales y estados tácticos ---------- */
+.vista-ancha {
+  max-width: 1400px;
+}
+
+.pestanas button[hidden] {
+  display: none;
+}
+
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: flex-end;
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 8px 12px 12px;
+  margin-top: 12px;
+}
+
+.segmentado {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.segmentado legend {
+  width: 100%;
+  font-size: 0.9rem;
+  margin: 4px 0;
+}
+
+.segmentado label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 10px;
+  min-height: 40px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.segmentado input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.buscar {
+  flex: 1 1 180px;
+}
+
+.buscar label {
+  font-size: 0.9rem;
+  margin: 4px 0;
+}
+
+.buscar input {
+  padding: 8px 10px;
+}
+
+.kanban {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.columna {
+  background: #e9ecef;
+  border-radius: 10px;
+  padding: 8px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.columna-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 4px 6px;
+}
+
+.columna-cabecera h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.contador-columna {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--suave);
+  white-space: nowrap;
+}
+
+.columna-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0 2px 0 0;
+  max-height: 62vh;
+  overflow-y: auto;
+}
+
+.tarjeta-foco {
+  background: var(--tarjeta);
+  border: 1px solid var(--borde);
+  border-left: 5px solid #90a4ae;
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+}
+
+.riesgo-borde-Alto {
+  border-left-color: var(--rojo);
+}
+
+.riesgo-borde-Medio {
+  border-left-color: #f9a825;
+}
+
+.riesgo-borde-Bajo {
+  border-left-color: var(--verde);
+}
+
+.tarjeta-foco .insignia {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+}
+
+.pie-tarjeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+}
+
+.ver-mas {
+  font-size: 0.9rem;
+}
+
+.carta-sin_carta,
+.carta-rechazada {
+  background: #ffebee;
+  color: var(--rojo-oscuro);
+}
+
+.carta-por_validar {
+  background: #fff8e1;
+  color: var(--ambar);
+}
+
+.carta-validada {
+  background: #e8f5e9;
+  color: var(--verde);
+}
+
+.panel-inferior {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 12px;
+}
+
+.mapa-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 6px;
+}
+
+.mapa-fondo {
+  fill: #f1f3e8;
+  stroke: var(--borde);
+}
+
+.mapa-reticula {
+  stroke: #d7dbc8;
+  stroke-width: 1;
+}
+
+.mapa-grado {
+  font-size: 10px;
+  fill: #8d9483;
+}
+
+.mapa-comunidad {
+  fill: #37474f;
+}
+
+.mapa-etiqueta {
+  font-size: 11px;
+  fill: #263238;
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 3px;
+}
+
+.mapa-foco circle {
+  fill-opacity: 0.8;
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+.riesgo-mapa-Alto circle {
+  fill: var(--rojo);
+}
+
+.riesgo-mapa-Medio circle {
+  fill: #f9a825;
+}
+
+.riesgo-mapa-Bajo circle {
+  fill: var(--verde);
+}
+
+.riesgo-mapa-ninguno circle {
+  fill: #90a4ae;
+}
+
+.mapa-cuenta {
+  font-size: 11px;
+  font-weight: 700;
+  fill: #fff;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.45);
+  stroke-width: 2px;
+}
+
+.mapa-brigada {
+  font-size: 12px;
+  font-weight: 700;
+  font-family: ui-monospace, 'Roboto Mono', monospace;
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 3px;
+}
+
+.leyenda {
+  font-size: 0.85rem;
+  margin: 6px 0 0;
+}
+
+.leyenda b {
+  font-family: ui-monospace, 'Roboto Mono', monospace;
+}
+
+.punto {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  vertical-align: middle;
+  border: 0;
+  padding: 0;
+}
+
+.punto.riesgo-Alto {
+  background: var(--rojo);
+}
+
+.punto.riesgo-Medio {
+  background: #f9a825;
+}
+
+.punto.riesgo-Bajo {
+  background: var(--verde);
+}
+
+.conteo {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.conteo li {
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 0.9rem;
+}
+
+.brigada-Disponible,
+.mapa-brigada.brigada-Disponible {
+  background: #e8f5e9;
+  color: var(--verde);
+  fill: var(--verde);
+}
+
+.brigada-En_Desplazamiento,
+.mapa-brigada.brigada-En_Desplazamiento {
+  background: #e3f2fd;
+  color: #1565c0;
+  fill: #1565c0;
+}
+
+.brigada-En_Combate_Activo,
+.mapa-brigada.brigada-En_Combate_Activo {
+  background: #ffebee;
+  color: var(--rojo-oscuro);
+  fill: var(--rojo-oscuro);
+}
+
+.brigada-En_Liquidacion,
+.mapa-brigada.brigada-En_Liquidacion {
+  background: #fff8e1;
+  color: var(--ambar);
+  fill: var(--ambar);
+}
+
+.brigada .boton {
+  min-height: 40px;
+  font-size: 0.95rem;
+}
+
+.carta {
+  border-top: 1px dashed var(--borde);
+  margin-top: 14px;
+}
+
+#carta-imagen {
+  display: block;
+  max-width: 100%;
+  max-height: 480px;
+  margin-top: 8px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+}
+
+.form-carta input[type='date'] {
+  width: 100%;
+  font-size: 1.05rem;
+  padding: 10px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+}
+
+.adjuntada {
+  border-color: #a5d6a7;
+}
+
+.brigada .cabecera-reporte,
+.carta-pendiente .cabecera-reporte {
+  flex-wrap: wrap;
+}
+
+/* Teléfono: columnas apiladas; cada una conserva su propio desplazamiento. */
+@media (max-width: 900px) {
+  .kanban,
+  .panel-inferior {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .columna-lista {
+    max-height: 50vh;
+  }
 }

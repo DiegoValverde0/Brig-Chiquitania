@@ -14,17 +14,18 @@ Modelo de referencia: `documentacion_base/Modelos_UML.md`. Alcance por bolt: `do
 ## Estructura
 ```
 backend/src/
-├── main.ts / configurar-app.ts  # prefijo /api, límites de cuerpo (JSON 16 KB, fotos 100 KB), estáticos opcionales
+├── main.ts / configurar-app.ts  # prefijo /api, límites de cuerpo (JSON 16 KB, binarios ≤1 MB), estáticos opcionales
 ├── app.module.ts           # ConfigModule + TypeORM (autoLoadEntities)
 ├── health.controller.ts    # GET /api/health (SELECT 1, público)
 ├── seed.ts / semilla.ts    # semilla idempotente (usuarios demo solo fuera de producción)
 ├── crear-usuario.ts        # alta por consola (primer coordinador en producción)
-├── common/                 # entidad-base, validacion, geo, cifrado (AES-256-GCM), filtro de errores de cuerpo
+├── common/                 # entidad-base, validacion, geo, cifrado (AES-256-GCM), filtro de errores de cuerpo,
+│                           # almacén de archivos cifrados (fotos y cartas; tipo por firma de bytes)
 └── core/
     ├── reporte/      (M1)  reporte GPS/distancia, evidencia fotográfica, catálogo comunal
-    ├── triage/       (M2)  incidente, carta municipal, motor de riesgo
-    ├── despacho/     (M3 / M4)
-    ├── operaciones/  (M4 / M5)  llegada, ΔT, historial append-only
+    ├── triage/       (M2)  incidente, carta municipal (adjuntar/validar/rechazar), motor de riesgo, evaluación
+    ├── despacho/     (M3 / M4)  panel COED con filtros, sugerencia y despacho, estados tácticos de brigada
+    ├── operaciones/  (M4 / M5)  llegada, ΔT, historial y evento_auditoria append-only
     ├── seguridad/    (MT-2)  usuarios, roles, guard global
     └── sync/         (MT-1)  canal SMS: codec BRC1, pasarela (puerto + simulada), webhook, bandeja
 ```
@@ -77,8 +78,8 @@ node dist/crear-usuario "Nombre" Coordinador   # alta por consola; imprime el to
 - Validación manual de payloads (`common/validacion.ts`), sin class-validator, por memoria.
 - Transiciones de estado siempre en una transacción que inserta en `historial_estado` vía
   `HistorialEstadoService` (única vía de escritura).
-- Guardas de despacho: riesgo Alto/Medio, `CartaMunicipal` no rechazada (Ley 602), `ContactoComunal` no vacío,
-  incidente en "Nuevo" y brigada "Disponible" (UPDATE condicional contra doble despacho).
+- Guardas de despacho: riesgo Alto/Medio, `CartaMunicipal.habilitaDespacho()` (adjunta y no rechazada: Ley 602),
+  `ContactoComunal` no vacío, incidente en "Nuevo" y brigada "Disponible" (UPDATE condicional contra doble despacho).
 - Motor de riesgo (`MotorRiesgoService`, `motor-v2` desde el Bolt 2): comunidad habitada <5 km ⇒ Alto (texto
   exacto "Amenaza directa a vida humana comunitaria"), 5–15 km ⇒ Medio (umbral aprobado por el PO), ≥15 km ⇒ Bajo.
   Los `PredioPrivado` (estancias) solo se listan como excluidos; nunca elevan el nivel. Devuelve `factores`
@@ -119,6 +120,22 @@ Bolt 2 (motor de riesgo y gobernanza algorítmica):
   (`EvaluacionService.reclasificar`) usa `HistorialEstadoService.registrarReclasificacion`, con bloqueo de fila;
   justificación de 15 a 500 caracteres (tras quitar espacios), solo Coordinador, nunca sobre un incidente Cerrado.
 - `PredioPrivado` (nueva, `core.reporte`, [inferencia]): catálogo de estancias, en claro como las comunidades.
+
+Bolt 3 (trámite municipal y estados tácticos):
+- `CartaMunicipal`: `archivoDigital` es la ruta del archivo cifrado en `EVIDENCIAS_DIR` (vía `AlmacenArchivosService`);
+  suma `tipoMime`, `pesoKB`, `sha256` (idempotencia del reenvío) y `motivoRechazo`. Sin `sha256` = referencia en
+  texto anterior al Bolt 3 (no se puede validar; la UGR adjunta el archivo). PDF/JPEG/PNG/WebP ≤1 MB (`PESO_MAXIMO_CARTA`);
+  "Recibida" ya habilita el despacho y "Rechazada" lo bloquea (decisión del PO). Solo se reemplaza una carta
+  rechazada; el motivo de rechazo exige ≥15 caracteres.
+- `Brigada.jefe` (Usuario, 1–1, "JefeBrigada lidera Brigada" del UML). Estados tácticos a mano (`estado-tactico.ts`,
+  función pura): el jefe de esa brigada reporta En Liquidación desde En Combate Activo (y su foco pasa de
+  En atención a En Liquidación, en el historial); el coordinador libera (Disponible) desde En Liquidación. 403 si el
+  rol o la brigada no corresponden, 409 si la transición no es válida.
+- `EventoAuditoria` (nueva, `core.operaciones`, [inferencia]): tabla append-only (triggers como `historial_estado`)
+  para eventos que no son del ciclo del incidente: carta adjuntada/reemplazada/validada/rechazada y cambio táctico de
+  brigada. Única vía de escritura: `AuditoriaService.registrar` dentro de la transacción del cambio.
+- `GET /api/panel`: filtros en `despacho/panel.ts` (funciones puras, en memoria porque las coordenadas están
+  cifradas); orden por riesgo y antigüedad; contadores por columna. 60 focos responden en <1 s (prueba e2e).
 
 Pendiente para bolts posteriores:
 

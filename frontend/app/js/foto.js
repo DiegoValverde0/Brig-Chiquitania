@@ -1,5 +1,6 @@
 /*
- * Compresión de la fotografía en el propio teléfono (RF-03: ≤100 KB) antes de guardarla o enviarla.
+ * Compresión de la fotografía en el propio teléfono (RF-03: ≤100 KB) antes de guardarla o enviarla. También
+ * comprime la foto de una carta municipal (Bolt 3: ≤1 MB, con más resolución para que se pueda leer).
  * Reduce primero la calidad JPEG y luego el tamaño, liberando el canvas al terminar (RS-01: poca RAM).
  */
 (function (global) {
@@ -30,11 +31,13 @@
     });
   }
 
-  /** Devuelve un Blob JPEG ≤100 KB. */
-  function comprimir(archivo) {
+  /** Devuelve un Blob JPEG ≤100 KB (o ≤opciones.pesoMaximo, partiendo de opciones.lado px). */
+  function comprimir(archivo, opciones) {
+    opciones = opciones || {};
+    var pesoMaximo = opciones.pesoMaximo || PESO_MAXIMO;
     return cargarImagen(archivo).then(function (img) {
       var canvas = document.createElement('canvas');
-      var lado = LADO_INICIAL;
+      var lado = opciones.lado || LADO_INICIAL;
       var calidad = 0.7;
 
       function intentar() {
@@ -43,10 +46,10 @@
         canvas.height = Math.max(1, Math.round(img.naturalHeight * escala));
         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
         return aJpeg(canvas, calidad).then(function (blob) {
-          if (blob && blob.size <= PESO_MAXIMO) return blob;
+          if (blob && blob.size <= pesoMaximo) return blob;
           if (calidad > 0.35) calidad -= 0.15;
           else lado = Math.round(lado * 0.75);
-          if (lado < 160) throw new Error('No se pudo comprimir la foto a 100 KB');
+          if (lado < 160) throw new Error('No se pudo comprimir la foto a ' + Math.round(pesoMaximo / 1024) + ' KB');
           return intentar();
         });
       }

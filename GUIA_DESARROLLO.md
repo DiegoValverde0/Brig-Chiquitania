@@ -1,8 +1,8 @@
 # Guía de despliegue en desarrollo y pruebas
 
 Pasos para levantar el MVP en una máquina de desarrollo con Docker, cargar datos de ejemplo y verificar todo
-lo construido hasta el **Bolt 2** (Walking Skeleton, captura resiliente y contacto comunal, motor de riesgo y
-gobernanza algorítmica).
+lo construido hasta el **Bolt 3** (Walking Skeleton, captura resiliente y contacto comunal, motor de riesgo y
+gobernanza algorítmica, trámite municipal y estados tácticos).
 
 > Todos los comandos se ejecutan desde la raíz del repositorio, salvo que se indique otra carpeta.
 > En Windows, usar PowerShell o Git Bash; los comandos `curl` de ejemplo están escritos para Bash.
@@ -67,7 +67,8 @@ docker compose exec api node dist/seed
 
 Crea (es idempotente, se puede ejecutar varias veces):
 - 7 comunidades de la Chiquitanía con su referente comunal (datos ficticios, coordenadas aproximadas).
-- 3 brigadas (dos en Santa Cruz de la Sierra, una en San Ignacio de Velasco), todas **Disponibles**.
+- 4 brigadas (dos en Santa Cruz de la Sierra, una en San Ignacio de Velasco y una en San José de Chiquitos), todas
+  **Disponibles**. El jefe demo (`demo-jefe-brigada`) lidera la Brigada Departamental 3.
 - 2 estancias **ficticias** para probar la exclusión de predios privados del motor de riesgo (Bolt 2).
 - 4 usuarios demo, uno por rol. **Sus códigos son públicos: solo para desarrollo.**
 
@@ -202,6 +203,58 @@ curl -X POST http://localhost:3000/api/incidentes -H "$G" -H 'Content-Type: appl
 
 Cargar estancias reales (coordinador): `POST /api/predios-privados` con `{"nombre":"…","latitud":…,"longitud":…}`.
 
+### 3.7 Carta municipal, panel COED y estados de brigada (Bolt 3)
+
+Actualizar desde el Bolt 2: `docker compose up -d --build` y volver a aplicar la semilla (agrega la 4.ª brigada y
+asigna el jefe demo a la Brigada 3). No hace falta borrar la base: las columnas nuevas se crean solas y las cartas
+anteriores quedan como "referencia sin archivo".
+
+1. **Focos de ejemplo.** Como guardaparque, enviar 3 o 4 reportes cerca de distintas comunidades (o usar el
+   bucle de abajo para generar 60).
+2. **Carta de la UGR (CU-08).** Ingresar con `demo-ugr`: se ven las pestañas **Reportar** y **Cartas**. En
+   **Cartas** aparecen los focos sin carta. Elegir un PDF o una foto de la carta (una foto de varios MB se
+   comprime sola a ≤1 MB), revisar la fecha de emisión y tocar **ADJUNTAR CARTA**: queda "por validar" y el foco
+   sale de la lista.
+3. **Panel COED (HU-3.1).** Ingresar con `demo-coordinador`, pestaña **Panel COED**:
+   - 4 columnas (Nuevo, Asignado, En atención, En liquidación) con "total · con carta";
+   - el filtro **Con carta** muestra solo las tarjetas con insignia *Por validar* o *Con carta*; **Sin carta**,
+     el resto; **Por validar**, las que esperan revisión;
+   - el mapa esquemático agrupa los focos por zona y muestra las brigadas con `*` `^` `#` `~`;
+   - el panel se actualiza solo cada 30 s sin perder el filtro.
+4. **Validar o rechazar.** Tocar una tarjeta: se abre su evaluación con la sección **Carta municipal**.
+   **Ver documento** muestra la imagen (o el enlace al PDF). **VALIDAR CARTA** la deja en *Con carta*. Para
+   rechazar, el motivo exige 15 caracteres; una carta rechazada bloquea el despacho y el foco vuelve a la
+   bandeja de la UGR con el motivo.
+5. **Estados tácticos (RF-08).** Despachar la Brigada 3 a un foco con carta y confirmar la llegada (el script
+   `backend/scripts/flujo-e2e.sh` lo hace por API). Ingresar con `demo-jefe-brigada` → pestaña **Mi brigada**:
+   aparece "En combate activo" y el botón **Reportar: EN LIQUIDACIÓN / POR FINALIZAR**. Al confirmarlo, la
+   brigada y su foco pasan a En liquidación. En el panel del coordinador, **Liberar brigada** la deja Disponible.
+
+Generar 60 focos (1 de cada 3 con carta) para probar la legibilidad del panel (RNF-05):
+
+```bash
+for i in $(seq 1 60); do
+  ID=$(node -e 'console.log(crypto.randomUUID())')
+  LAT=$(node -e "console.log((-16.1333 + ($i % 14 + 1) / 111.195).toFixed(5))")
+  curl -s -o /dev/null -X POST http://localhost:3000/api/incidentes -H 'Authorization: Bearer demo-guardaparque' \
+    -H 'Content-Type: application/json' -d "{\"id\":\"$ID\",\"latitud\":$LAT,\"longitud\":-62.0258,\"precisionMetros\":8}"
+  if [ $((i % 3)) -eq 0 ]; then
+    printf '%%PDF-1.4\n%% carta %s\n%%%%EOF\n' "$ID" | curl -s -o /dev/null -X POST \
+      "http://localhost:3000/api/incidentes/$ID/carta-municipal" -H 'Authorization: Bearer demo-ugr' \
+      -H 'Content-Type: application/pdf' -H 'x-fecha-emision: 2026-09-28' --data-binary @-
+  fi
+done
+curl -s 'http://localhost:3000/api/panel?carta=con' -H 'Authorization: Bearer demo-coordinador' | head -c 300
+```
+
+Auditoría append-only de cartas y brigadas:
+
+```bash
+docker compose exec db psql -U chiquitania -d chiquitania_db \
+  -c "SELECT tipo, detalle, creado_en FROM evento_auditoria ORDER BY creado_en DESC LIMIT 5;" \
+  -c "UPDATE evento_auditoria SET detalle = 'x';"   # debe fallar: registro inmutable (RNF-07)
+```
+
 ---
 
 ## 4. Pruebas automatizadas
@@ -215,16 +268,17 @@ La base `chiquitania_db` no se toca: las pruebas e2e crean y vacían su propia b
 docker compose up -d db          # basta con la base de datos
 cd backend
 npm ci
-npm test                         # unitarias (sin BD): cifrado, codec SMS, geografía, motor de riesgo, validación
-npm run test:e2e                 # flujo Bolt 0 + captura Bolt 1 contra PostgreSQL
+npm test                         # unitarias (sin BD): cifrado, codec SMS, geografía, motor, validación, panel, estados
+npm run test:e2e                 # Bolts 0 a 3 contra PostgreSQL
 cd ..
 ```
 
-Resultado esperado al cierre del Bolt 2: **30 unitarias** y **45 e2e** en verde.
+Resultado esperado al cierre del Bolt 3: **43 unitarias** y **64 e2e** en verde.
 
 ### 4.2 App web en el navegador (Playwright)
 
-Requiere el entorno levantado y la semilla aplicada (sección 2), y un Chrome/Chromium local.
+Requiere el entorno levantado y la semilla aplicada (sección 2), y un Chrome/Chromium local. La prueba despacha
+brigadas: antes de repetirla, volver a aplicar la semilla (deja las 4 brigadas Disponibles).
 
 ```bash
 cd frontend/pruebas
@@ -238,8 +292,10 @@ APP=http://localhost:8080 npm test
 cd ../..
 ```
 
-Resultado esperado: **8/8 pasos OK** (inicio de sesión, reporte GPS con foto, cola sin conexión, recarga sin
-red, sincronización, SMS simulado, evaluación y reclasificación del coordinador, y memoria). Las capturas quedan en `frontend/pruebas/capturas/`.
+Resultado esperado: **13/13 pasos OK** (inicio de sesión, reporte GPS con foto, cola sin conexión, recarga sin
+red, sincronización, SMS simulado, evaluación y reclasificación del coordinador; Bolt 3: 60 focos simulados, jefe
+de brigada "En Liquidación", carta de la UGR, panel COED a 1366 px con filtros, validación y rechazo, panel a
+360 px; y memoria). Las capturas quedan en `frontend/pruebas/capturas/`.
 
 ### 4.3 Desarrollo de la API sin Docker (opcional)
 

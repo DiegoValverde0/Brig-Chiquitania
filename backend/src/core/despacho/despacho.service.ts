@@ -9,18 +9,19 @@ import { distanciaKm } from '../../common/geo';
 import { exigirObjeto, exigirUuid } from '../../common/validacion';
 import { HistorialEstadoService } from '../operaciones/historial-estado.service';
 import { ContactoComunal } from '../reporte/entities/contacto-comunal.entity';
+import { estadoCartaPanel } from '../triage/carta-municipal.service';
 import { CartaMunicipal } from '../triage/entities/carta-municipal.entity';
 import { Incidente } from '../triage/entities/incidente.entity';
 import { EstadoIncidente } from '../triage/enums/estado-incidente.enum';
-import { EstadoTramite } from '../triage/enums/estado-tramite.enum';
 import { NivelRiesgo } from '../triage/enums/nivel-riesgo.enum';
 import { AsignacionDespacho } from './entities/asignacion-despacho.entity';
+import { BrigadasService } from './brigadas.service';
 import { Brigada } from './entities/brigada.entity';
 import { EstadoBrigada } from './enums/estado-brigada.enum';
+import { armarColumnas, FiltrosPanel, TarjetaPanel } from './panel';
 
 /** CU-04: solo focos Alto/Medio justifican el despacho departamental. */
 const RIESGOS_DESPACHABLES = [NivelRiesgo.Alto, NivelRiesgo.Medio];
-const ORDEN_RIESGO: Record<NivelRiesgo, number> = { Alto: 0, Medio: 1, Bajo: 2 };
 
 export interface BrigadaSugerida {
   id: string;
@@ -42,40 +43,49 @@ export class DespachoService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly historial: HistorialEstadoService,
+    private readonly brigadas: BrigadasService,
   ) {}
 
-  /** HU-3.1 (parcial): incidentes activos agrupados por estado y brigadas con su estado operativo. */
-  async panel() {
-    const incidentes = await this.dataSource.getRepository(Incidente).find({
-      where: { estado: Not(EstadoIncidente.Cerrado) },
-      relations: { comunidad: { contacto: true }, cartaMunicipal: true },
-      order: { fechaReporte: 'ASC' },
-    });
-    const columnas: Record<string, unknown[]> = {
-      [EstadoIncidente.Nuevo]: [],
-      [EstadoIncidente.Asignado]: [],
-      [EstadoIncidente.En_Atencion]: [],
-      [EstadoIncidente.En_Liquidacion]: [],
+  /**
+   * HU-3.1 / RF-07 / RF-08 / RNF-05: Kanban del COED. Incidentes activos por columna (filtrables por trámite
+   * municipal, riesgo y comunidad), contadores por columna, y brigadas con su estado táctico y foco asignado.
+   */
+  async panel(filtros: FiltrosPanel = { carta: null, riesgos: null, comunidad: null }) {
+    const [incidentes, brigadas] = await Promise.all([
+      this.dataSource.getRepository(Incidente).find({
+        where: { estado: Not(EstadoIncidente.Cerrado) },
+        relations: { comunidad: { contacto: true }, cartaMunicipal: true },
+      }),
+      this.brigadas.listar(),
+    ]);
+    const brigadaDe = new Map(brigadas.filter((b) => b.incidente).map((b) => [b.incidente!.id, b.nombre]));
+    const tarjetas: TarjetaPanel[] = incidentes.map((i) => ({
+      id: i.id,
+      estado: i.estado,
+      nivelRiesgo: i.nivelRiesgo,
+      origenRiesgo: i.origenRiesgo,
+      justificacionRiesgo: i.justificacionRiesgo,
+      fechaReporte: i.fechaReporte,
+      coordenada: {
+        latitud: i.coordenada.latitud,
+        longitud: i.coordenada.longitud,
+        precisionMetros: i.coordenada.precisionMetros,
+      },
+      comunidad: i.comunidad?.nombre ?? null,
+      estadoCarta: estadoCartaPanel(i.cartaMunicipal),
+      tieneCartaMunicipal: !!i.cartaMunicipal?.habilitaDespacho(),
+      tieneContactoComunal: !!i.comunidad?.contacto?.validarNoVacio(),
+      brigada: brigadaDe.get(i.id) ?? null,
+    }));
+    const { incidentes: columnas, columnas: contadores, total, visibles } = armarColumnas(tarjetas, filtros);
+    const porEstado = Object.fromEntries(
+      Object.values(EstadoBrigada).map((e) => [e, brigadas.filter((b) => b.estadoOperativo === e).length]),
+    );
+    return {
+      incidentes: columnas,
+      brigadas,
+      resumen: { total, visibles, filtros, columnas: contadores, brigadas: porEstado },
     };
-    incidentes
-      .sort((a, b) => rangoRiesgo(a) - rangoRiesgo(b))
-      .forEach((i) =>
-        columnas[i.estado].push({
-          id: i.id,
-          nivelRiesgo: i.nivelRiesgo,
-          origenRiesgo: i.origenRiesgo,
-          justificacionRiesgo: i.justificacionRiesgo,
-          fechaReporte: i.fechaReporte,
-          coordenada: i.coordenada,
-          comunidad: i.comunidad?.nombre ?? null,
-          tieneCartaMunicipal: !!i.cartaMunicipal && i.cartaMunicipal.estadoTramite !== EstadoTramite.Rechazada,
-          tieneContactoComunal: !!i.comunidad?.contacto?.validarNoVacio(),
-        }),
-      );
-    const brigadas = await this.dataSource
-      .getRepository(Brigada)
-      .find({ select: { id: true, nombre: true, estadoOperativo: true }, order: { nombre: 'ASC' } });
-    return { incidentes: columnas, brigadas };
   }
 
   /** HU-4.1: brigadas Disponibles ordenadas por cercanía. Solo sugiere; nunca asigna sola (RS-03). */
@@ -155,10 +165,6 @@ export class DespachoService {
   }
 }
 
-function rangoRiesgo(i: Incidente): number {
-  return i.nivelRiesgo ? ORDEN_RIESGO[i.nivelRiesgo] : 3;
-}
-
 function exigirRiesgoDespachable(incidente: Incidente): void {
   if (!incidente.nivelRiesgo || !RIESGOS_DESPACHABLES.includes(incidente.nivelRiesgo)) {
     throw new UnprocessableEntityException(
@@ -169,9 +175,11 @@ function exigirRiesgoDespachable(incidente: Incidente): void {
 
 async function exigirCartaMunicipal(em: EntityManager, incidenteId: string): Promise<void> {
   const carta = await em.findOneBy(CartaMunicipal, { incidente: { id: incidenteId } });
-  if (!carta || carta.estadoTramite === EstadoTramite.Rechazada) {
+  if (!carta || !carta.habilitaDespacho()) {
     throw new UnprocessableEntityException(
-      'Despacho bloqueado (Ley N.º 602): falta la carta formal de solicitud municipal',
+      carta
+        ? 'Despacho bloqueado (Ley N.º 602): la carta municipal fue rechazada; la UGR debe adjuntar una nueva'
+        : 'Despacho bloqueado (Ley N.º 602): falta la carta formal de solicitud municipal',
     );
   }
 }

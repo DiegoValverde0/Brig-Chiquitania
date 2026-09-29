@@ -25,11 +25,15 @@ export const COMUNIDADES: Array<{ id: string; nombre: string; latitud: number; l
   { id: '00000000-0000-4000-8000-000000000107', nombre: 'Roboré', latitud: -18.3308, longitud: -59.7594 },
 ];
 
-/** [inferencia] Dos brigadas acuarteladas en Santa Cruz de la Sierra y una destacada en San Ignacio. */
+/**
+ * [inferencia] Dos brigadas acuarteladas en Santa Cruz de la Sierra, una destacada en San Ignacio y (Bolt 3) otra en
+ * San José de Chiquitos, para ver los 4 estados tácticos a la vez en el panel.
+ */
 export const BRIGADAS: Array<{ id: string; nombre: string; latitud: number; longitud: number }> = [
   { id: '00000000-0000-4000-8000-000000000201', nombre: 'Brigada Departamental 1', latitud: -17.7833, longitud: -63.1821 },
   { id: '00000000-0000-4000-8000-000000000202', nombre: 'Brigada Departamental 2', latitud: -17.7833, longitud: -63.1821 },
   { id: '00000000-0000-4000-8000-000000000203', nombre: 'Brigada Departamental 3', latitud: -16.3667, longitud: -60.95 },
+  { id: '00000000-0000-4000-8000-000000000204', nombre: 'Brigada Departamental 4', latitud: -17.8456, longitud: -60.7394 },
 ];
 
 /**
@@ -52,6 +56,9 @@ export const USUARIOS_DEMO: Array<{ id: string; nombre: string; rol: Rol; telefo
   { id: '00000000-0000-4000-8000-000000000403', nombre: 'Jefe de Brigada (demo)', rol: Rol.JefeBrigada, telefono: '+59170000403', token: 'demo-jefe-brigada' },
   { id: '00000000-0000-4000-8000-000000000404', nombre: 'Responsable UGR (demo)', rol: Rol.ResponsableUGR, telefono: '+59170000404', token: 'demo-ugr' },
 ];
+
+export const BRIGADA_DEL_JEFE_DEMO = '00000000-0000-4000-8000-000000000203';
+export const JEFE_DEMO = '00000000-0000-4000-8000-000000000403';
 
 export async function aplicarSemilla(ds: DataSource): Promise<void> {
   await ds.transaction(async (em) => {
@@ -83,6 +90,10 @@ export async function aplicarSemilla(ds: DataSource): Promise<void> {
         estadoOperativo: EstadoBrigada.Disponible,
         ubicacionActual: { latitud: b.latitud, longitud: b.longitud, precisionMetros: null },
       });
+    }
+    // Bolt 3: el jefe demo lidera la Brigada Departamental 3 (solo fuera de producción, como los usuarios demo).
+    if (process.env.NODE_ENV !== 'production') {
+      await em.update(Brigada, { id: BRIGADA_DEL_JEFE_DEMO }, { jefe: { id: JEFE_DEMO } });
     }
     for (const p of PREDIOS) {
       await em.save(PredioPrivado, {

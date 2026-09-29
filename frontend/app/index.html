@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#b71c1c">
-  <title>Reporte de focos — Chiquitanía</title>
+  <title>Focos de calor — Chiquitanía</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icono.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/app.css">
@@ -32,11 +32,82 @@
       <span id="estado-red" class="insignia" aria-live="polite"></span>
     </header>
 
-    <!-- Pestañas por rol: el coordinador también evalúa el riesgo (CU-02). -->
+    <!-- Pestañas por rol (app.js decide cuáles ve cada uno; la API también lo exige: RNF-08). -->
     <nav id="pestanas" class="pestanas" role="tablist" hidden>
       <button type="button" role="tab" id="tab-reportar" aria-selected="true" aria-controls="panel-reportar">Reportar</button>
-      <button type="button" role="tab" id="tab-evaluacion" aria-selected="false" aria-controls="panel-evaluacion">Evaluación de riesgo</button>
+      <button type="button" role="tab" id="tab-panel" aria-selected="false" aria-controls="panel-panel" hidden>Panel COED</button>
+      <button type="button" role="tab" id="tab-evaluacion" aria-selected="false" aria-controls="panel-evaluacion" hidden>Evaluación</button>
+      <button type="button" role="tab" id="tab-cartas" aria-selected="false" aria-controls="panel-cartas" hidden>Cartas</button>
+      <button type="button" role="tab" id="tab-brigada" aria-selected="false" aria-controls="panel-brigada" hidden>Mi brigada</button>
     </nav>
+
+    <!-- HU-3.1 / RF-07 / RF-08 (Figura 9): Kanban del COED, solo coordinador -->
+    <section id="panel-panel" role="tabpanel" hidden>
+      <form id="filtros-panel" class="filtros" onsubmit="return false">
+        <fieldset class="segmentado" id="filtro-carta">
+          <legend>Carta municipal (Ley 602)</legend>
+          <label><input type="radio" name="carta" value="" checked> Todos</label>
+          <label><input type="radio" name="carta" value="con"> Con carta</label>
+          <label><input type="radio" name="carta" value="sin"> Sin carta</label>
+          <label><input type="radio" name="carta" value="por_validar"> Por validar</label>
+        </fieldset>
+        <fieldset class="segmentado" id="filtro-riesgo">
+          <legend>Riesgo</legend>
+          <label><input type="checkbox" name="riesgo" value="Alto"> Alto</label>
+          <label><input type="checkbox" name="riesgo" value="Medio"> Medio</label>
+          <label><input type="checkbox" name="riesgo" value="Bajo"> Bajo</label>
+        </fieldset>
+        <div class="buscar">
+          <label for="filtro-comunidad">Comunidad</label>
+          <input id="filtro-comunidad" type="text" maxlength="120" placeholder="Buscar…" autocomplete="off">
+        </div>
+      </form>
+      <div class="barra-acciones">
+        <p id="resumen-panel" class="nota" aria-live="polite"></p>
+        <button type="button" id="actualizar-panel" class="enlace">↻ Actualizar</button>
+      </div>
+      <p id="error-panel" class="error" role="alert"></p>
+      <div id="kanban" class="kanban"></div>
+      <div class="panel-inferior">
+        <section class="tarjeta mapa-caja">
+          <h2>Mapa esquemático</h2>
+          <div id="mapa-panel" class="mapa" role="img" aria-label="Mapa esquemático de focos y brigadas"></div>
+          <p class="leyenda">
+            <span class="punto riesgo-Alto"></span> Alto <span class="punto riesgo-Medio"></span> Medio
+            <span class="punto riesgo-Bajo"></span> Bajo ·
+            <b>*</b> Disponible <b>^</b> En desplazamiento <b>#</b> En combate <b>~</b> En liquidación
+          </p>
+          <p class="nota">Sin teselas ni conexión (RF-01): comunidades del catálogo, focos agrupados por cuadrícula.</p>
+        </section>
+        <section class="tarjeta">
+          <h2>Brigadas</h2>
+          <ul id="conteo-brigadas" class="conteo"></ul>
+          <ul id="lista-brigadas" class="lista"></ul>
+        </section>
+      </div>
+    </section>
+
+    <!-- CU-08 (Ley 602): la UGR adjunta la carta; el coordinador, como contingencia -->
+    <section id="panel-cartas" role="tabpanel" hidden>
+      <div class="barra-acciones">
+        <h2>Focos que esperan carta municipal</h2>
+        <button type="button" id="actualizar-cartas" class="enlace">↻ Actualizar</button>
+      </div>
+      <p class="nota">PDF o foto de la carta firmada (máx. 1 MB; las fotos se comprimen solas).</p>
+      <p id="error-cartas" class="error" role="alert"></p>
+      <ul id="lista-cartas" class="lista"></ul>
+    </section>
+
+    <!-- RF-08 / Acta ACTA-002 (acuerdo 4): el jefe reporta "En Liquidación / Por finalizar" -->
+    <section id="panel-brigada" role="tabpanel" hidden>
+      <article id="mi-brigada" class="tarjeta">
+        <p class="nota">Cargando…</p>
+      </article>
+      <button type="button" id="reportar-liquidacion" class="boton boton-principal" hidden>
+        Reportar: EN LIQUIDACIÓN / POR FINALIZAR</button>
+      <p id="mensaje-brigada" class="nota" role="status"></p>
+      <button type="button" id="actualizar-brigada" class="enlace">↻ Actualizar</button>
+    </section>
 
     <!-- CU-02 (Figura 8): evaluación y reclasificación del riesgo, solo coordinador (HU-2.1, HU-2.2) -->
     <section id="panel-evaluacion" role="tabpanel" hidden>
@@ -75,6 +146,24 @@
           <button type="submit" id="guardar-reclasificacion" class="boton boton-oscuro" disabled>GUARDAR RECLASIFICACIÓN</button>
           <p id="mensaje-reclasificacion" class="nota" role="status"></p>
         </form>
+
+        <section id="detalle-carta" class="carta">
+          <h3>Carta municipal (Ley 602)</h3>
+          <p id="carta-estado"></p>
+          <div id="carta-documento" hidden>
+            <button type="button" id="ver-carta" class="boton">📄 Ver documento</button>
+            <img id="carta-imagen" alt="Carta municipal" hidden>
+            <a id="carta-enlace" class="enlace" target="_blank" rel="noopener" hidden>Abrir / descargar el documento</a>
+          </div>
+          <div id="carta-acciones" hidden>
+            <button type="button" id="validar-carta" class="boton boton-oscuro">VALIDAR CARTA</button>
+            <label for="motivo-rechazo">Motivo del rechazo (mínimo 15 caracteres)
+              <span id="contador-motivo" class="contador">0/15 car.</span></label>
+            <textarea id="motivo-rechazo" rows="2" maxlength="500" placeholder="Ej.: Falta firma y sello del municipio"></textarea>
+            <button type="button" id="rechazar-carta" class="boton" disabled>RECHAZAR CARTA</button>
+          </div>
+          <p id="mensaje-carta" class="nota" role="status"></p>
+        </section>
 
         <h3>Historial de reclasificaciones</h3>
         <ul id="detalle-historial" class="lista historial"></ul>
@@ -168,6 +257,9 @@
   <script src="js/foto.js"></script>
   <script src="js/sync.js"></script>
   <script src="js/evaluacion.js"></script>
+  <script src="js/panel.js"></script>
+  <script src="js/cartas.js"></script>
+  <script src="js/brigada.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

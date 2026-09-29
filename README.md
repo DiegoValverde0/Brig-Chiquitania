@@ -51,6 +51,16 @@ historial append-only (`sh backend/scripts/flujo-e2e.sh` lo recorre con curl).
   historial append-only con quién, cuándo, motivo y niveles.
 - Pestaña "Evaluación de riesgo" en la app para el coordinador (wireframe de la Figura 8).
 
+**Bolt 3 — Trámite municipal y estados tácticos:**
+- Carta municipal digitalizada (Ley 602): la UGR adjunta el PDF o la foto (≤1 MB, cifrada en reposo); queda
+  "por validar" y ya habilita el despacho. El coordinador la valida o la rechaza con motivo (≥15 caracteres), y
+  el rechazo bloquea el despacho hasta que la UGR adjunte otra. Todo queda en `evento_auditoria` (append-only).
+- Panel COED (Figura 9): Kanban de 4 columnas con contadores, filtros por carta (con / sin / por validar),
+  riesgo y comunidad, "ver más" desde 15 tarjetas, actualización cada 30 s, y mapa esquemático en SVG propio
+  (sin teselas) con focos agrupados y brigadas.
+- Estados tácticos de brigada (4): el jefe reporta "En Liquidación / Por finalizar" (su foco pasa a
+  En Liquidación) y el coordinador libera la brigada (Disponible).
+
 ## API
 
 Todas las rutas exigen `Authorization: Bearer <token>` salvo `/api/health` y el webhook SMS.
@@ -70,13 +80,20 @@ Todas las rutas exigen `Authorization: Bearer <token>` salvo `/api/health` y el 
 | `POST` | `/api/sms/simulador` | cualquiera | Simula el SMS que enviaría el teléfono |
 | `GET` | `/api/sms/configuracion` | cualquiera | Número de la central y pasarela activa |
 | `GET` | `/api/sms/mensajes` | Coordinador | Bandeja de SMS entrantes y salientes |
-| `GET` | `/api/panel` | Coordinador | Incidentes activos por estado y brigadas |
+| `GET` | `/api/panel` | Coordinador | Kanban: incidentes activos por columna, contadores y brigadas; filtros `?carta=con\|sin\|por_validar`, `?riesgo=Alto,Medio`, `?comunidad=` |
+| `GET` | `/api/brigadas` | Coordinador | Brigadas con estado táctico, jefe y foco asignado |
+| `GET` | `/api/brigadas/mia` | Jefe de Brigada | La brigada que lidera el usuario |
+| `POST` | `/api/brigadas/:id/estado` | Jefe de Brigada, Coordinador | `{estado: "En_Liquidacion"}` (jefe de esa brigada, desde En Combate) o `{estado: "Disponible"}` (coordinador, desde En Liquidación) |
 | `GET` | `/api/incidentes/:id/evaluacion` | Coordinador | Riesgo vigente, origen, justificación y factores del motor, reclasificaciones |
 | `POST` | `/api/incidentes/:id/reclasificacion` | Coordinador | Reclasificación manual `{nivelRiesgo, justificacion}` (≥15 caracteres) |
 | `GET` / `POST` | `/api/predios-privados` | Coordinador | Catálogo de estancias excluidas de la priorización |
-| `POST` | `/api/incidentes/:id/carta-municipal` | UGR, Coordinador | Registro de la carta municipal (0..1) |
+| `POST` | `/api/incidentes/:id/carta-municipal` | UGR, Coordinador | Carta municipal como binario (PDF, JPEG, PNG o WebP ≤1 MB) con cabecera `x-fecha-emision: AAAA-MM-DD`; 0..1 (201 nueva / 200 reenvío; reemplaza solo una rechazada) |
+| `GET` | `/api/incidentes/:id/carta-municipal` | UGR, Coordinador | Estado del trámite (sin carta / por validar / validada / rechazada) |
+| `GET` | `/api/incidentes/:id/carta-municipal/archivo` | UGR, Coordinador | Documento descifrado |
+| `POST` | `/api/incidentes/:id/carta-municipal/verificacion` | Coordinador | `{resultado: "Validada" \| "Rechazada", motivo}` (motivo ≥15 caracteres al rechazar) |
+| `GET` | `/api/cartas/pendientes` | UGR, Coordinador | Focos activos sin carta o con carta rechazada |
 | `GET` | `/api/incidentes/:id/brigadas-sugeridas` | Coordinador | Brigadas Disponibles por cercanía (solo riesgo Alto/Medio) |
-| `POST` | `/api/incidentes/:id/asignaciones` | Coordinador | Despacho confirmado (exige carta y contacto comunal) |
+| `POST` | `/api/incidentes/:id/asignaciones` | Coordinador | Despacho confirmado (exige carta no rechazada y contacto comunal) |
 | `POST` | `/api/asignaciones/:id/llegada` | Jefe de Brigada, Coordinador | Confirmación de llegada (write-once) |
 | `GET` | `/api/incidentes/:id/tiempo-despacho` | Coordinador | ΔT, % de ahorro y cumplimiento de la meta del 30 % |
 | `GET` | `/api/incidentes/:id/historial` | Coordinador | Historial append-only: quién, cuándo y motivo |
@@ -90,4 +107,6 @@ Formato SMS (`BRC1`, texto plano ≤160 caracteres):
 
 - `backend/`: `npm test` (unitarias) y `npm run test:e2e` (requiere PostgreSQL; crea y vacía la BD `chiquitania_test`).
 - `frontend/pruebas/`: `npm ci && APP=http://localhost:8080 npm test` recorre la app en Chromium (sin conexión,
-  cola, SMS simulado y memoria). Requiere Chromium (`CHROMIUM=/ruta/al/binario`).
+  cola, SMS simulado, evaluación de riesgo, panel COED con 60 focos, cartas y estados de brigada, memoria).
+  Requiere Chromium (`CHROMIUM=/ruta/al/binario`) y una BD recién sembrada (`npm run seed` deja las brigadas
+  Disponibles).
