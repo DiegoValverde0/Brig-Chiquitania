@@ -3,7 +3,7 @@
  * se cachea (los datos viven en IndexedDB y los maneja la cola de sincronización).
  * Subir VERSION al cambiar cualquier archivo de la lista.
  */
-var VERSION = 'brc-app-v2';
+var VERSION = 'brc-app-v3';
 var CASCARA = [
   './',
   'index.html',
@@ -15,6 +15,9 @@ var CASCARA = [
   'js/foto.js',
   'js/sync.js',
   'js/evaluacion.js',
+  'js/panel.js',
+  'js/cartas.js',
+  'js/brigada.js',
   'js/app.js',
   'manifest.webmanifest',
   'icono.svg',

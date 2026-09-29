@@ -6,13 +6,13 @@ import { CartaMunicipal } from './entities/carta-municipal.entity';
 import { EvaluacionService } from './evaluacion.service';
 import { MotorRiesgoService } from './motor-riesgo.service';
 import { TriageController } from './triage.controller';
-import { TriageService } from './triage.service';
+import { CartaMunicipalService } from './carta-municipal.service';
 
-/** core.triage (M2): motor de riesgo explicable, reclasificación manual y validación legal (carta municipal). */
+/** core.triage (M2): motor de riesgo explicable, reclasificación manual y trámite legal (carta municipal, Ley 602). */
 @Module({
   imports: [TypeOrmModule.forFeature([Incidente, CartaMunicipal]), OperacionesModule],
   controllers: [TriageController],
-  providers: [MotorRiesgoService, TriageService, EvaluacionService],
+  providers: [MotorRiesgoService, CartaMunicipalService, EvaluacionService],
   exports: [TypeOrmModule, MotorRiesgoService],
 })
 export class TriageModule {}

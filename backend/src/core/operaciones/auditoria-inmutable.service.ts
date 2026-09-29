@@ -3,7 +3,7 @@ import { DataSource } from 'typeorm';
 
 /**
  * RNF-07: protección append-only en la propia BD, no solo en la API.
- * - historial_estado: se rechaza todo UPDATE, DELETE y TRUNCATE.
+ * - historial_estado y evento_auditoria: se rechaza todo UPDATE, DELETE y TRUNCATE.
  * - incidente.fecha_reporte y asignacion_despacho.timestamp_confirmacion_llegada: write-once
  *   (una vez fijados no cambian), porque de ellos sale el ΔT del KPI.
  * Idempotente: se aplica en cada arranque mientras se use `synchronize`; con migraciones pasará a una migración.
@@ -33,6 +33,16 @@ CREATE TRIGGER historial_estado_append_only
 DROP TRIGGER IF EXISTS historial_estado_sin_truncate ON historial_estado;
 CREATE TRIGGER historial_estado_sin_truncate
   BEFORE TRUNCATE ON historial_estado
+  FOR EACH STATEMENT EXECUTE FUNCTION rechazar_modificacion_auditoria();
+
+DROP TRIGGER IF EXISTS evento_auditoria_append_only ON evento_auditoria;
+CREATE TRIGGER evento_auditoria_append_only
+  BEFORE UPDATE OR DELETE ON evento_auditoria
+  FOR EACH ROW EXECUTE FUNCTION rechazar_modificacion_auditoria();
+
+DROP TRIGGER IF EXISTS evento_auditoria_sin_truncate ON evento_auditoria;
+CREATE TRIGGER evento_auditoria_sin_truncate
+  BEFORE TRUNCATE ON evento_auditoria
   FOR EACH STATEMENT EXECUTE FUNCTION rechazar_modificacion_auditoria();
 
 CREATE OR REPLACE FUNCTION proteger_fecha_reporte() RETURNS trigger AS $$

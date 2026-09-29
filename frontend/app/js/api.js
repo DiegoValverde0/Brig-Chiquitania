@@ -40,6 +40,11 @@
     }).then(
       function (res) {
         clearTimeout(temporizador);
+        if (res.ok && opciones.comoBlob) {
+          return res.blob().then(function (blob) {
+            return { estado: res.status, datos: blob };
+          });
+        }
         return res.text().then(function (texto) {
           var datos = null;
           try {
@@ -71,6 +76,10 @@
     },
     postBinario: function (ruta, blob, cabeceras) {
       return pedir('POST', ruta, { binario: blob, cabeceras: cabeceras });
+    },
+    /** Descarga un archivo protegido (p. ej. la carta municipal) como Blob. */
+    blob: function (ruta) {
+      return pedir('GET', ruta, { comoBlob: true, tiempoLimite: 60000 });
     },
   };
 })(self);

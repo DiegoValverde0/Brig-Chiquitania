@@ -48,3 +48,23 @@ export async function crearAppPruebas(): Promise<AppPruebas> {
   };
   return { app, ds, como };
 }
+
+/** PDF mínimo para pruebas; la etiqueta cambia el contenido (y su sha256). */
+export function pdfDePrueba(etiqueta = 'carta'): Buffer {
+  return Buffer.from(`%PDF-1.4\n% Carta municipal de prueba: ${etiqueta}\n%%EOF\n`);
+}
+
+/** CU-08: adjunta la carta municipal como archivo binario con su fecha de emisión. */
+export function subirCarta(
+  cliente: Cliente,
+  incidenteId: string,
+  archivo: Buffer = pdfDePrueba(incidenteId),
+  tipo = 'application/pdf',
+  fechaEmision = '2026-09-28',
+): request.Test {
+  return cliente
+    .post(`/api/incidentes/${incidenteId}/carta-municipal`)
+    .set('Content-Type', tipo)
+    .set('x-fecha-emision', fechaEmision)
+    .send(archivo);
+}

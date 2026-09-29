@@ -7,6 +7,9 @@
  * Cubre la DoD del Bolt 1 desde el teléfono: reporte GPS con foto comprimida ≤100 KB, contacto comunal
  * autocompletado offline, reporte sin datos (cola en IndexedDB + SMS ≤160) que sobrevive a recargar la app sin
  * red y se sincroniza solo al volver la señal, envío por la pasarela SMS simulada y consumo de memoria (RS-01).
+ * Bolt 2: evaluación y reclasificación del riesgo. Bolt 3: panel COED con 60 focos simulados (filtros de carta,
+ * contadores, 4 estados de brigada, mapa esquemático), carta de la UGR → validación/rechazo del coordinador y
+ * reporte "En Liquidación" del jefe de brigada; capturas a 1366 px y 360 px.
  */
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
@@ -62,6 +65,95 @@ function pngRuido(ancho, alto) {
 async function api(ruta, token = 'demo-coordinador') {
   const res = await fetch(`${APP}/api${ruta}`, { headers: { Authorization: `Bearer ${token}` } });
   return { estado: res.status, datos: res.headers.get('content-type')?.includes('json') ? await res.json() : await res.arrayBuffer() };
+}
+
+/** Llamada a la API con cuerpo JSON o binario (preparación de datos de las pruebas). */
+async function llamar(metodo, ruta, token, cuerpo, cabeceras = {}) {
+  const binario = Buffer.isBuffer(cuerpo);
+  const res = await fetch(`${APP}/api${ruta}`, {
+    method: metodo,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(cuerpo === undefined ? {} : { 'Content-Type': binario ? 'application/pdf' : 'application/json' }),
+      ...cabeceras,
+    },
+    body: cuerpo === undefined ? undefined : binario ? cuerpo : JSON.stringify(cuerpo),
+  });
+  const texto = await res.text();
+  return { estado: res.status, datos: texto ? JSON.parse(texto) : null };
+}
+
+const COMUNIDADES = [
+  { nombre: 'Concepción', latitud: -16.1333, longitud: -62.0258 },
+  { nombre: 'San Javier', latitud: -16.2747, longitud: -62.5064 },
+  { nombre: 'San Ignacio de Velasco', latitud: -16.3667, longitud: -60.95 },
+  { nombre: 'San Rafael de Velasco', latitud: -16.7869, longitud: -60.6747 },
+  { nombre: 'Santa Ana de Velasco', latitud: -16.585, longitud: -60.6883 },
+  { nombre: 'San José de Chiquitos', latitud: -17.8456, longitud: -60.7394 },
+  { nombre: 'Roboré', latitud: -18.3308, longitud: -59.7594 },
+];
+const BRIGADA = (n) => `00000000-0000-4000-8000-00000000020${n}`;
+const pdf = (etiqueta) => Buffer.from(`%PDF-1.4\n% Carta municipal de prueba ${etiqueta}\n%%EOF\n`);
+
+/** Crea un foco a `km` al norte de la comunidad y, si se pide, le adjunta una carta (UGR). */
+async function focoSimulado(i, km, conCarta) {
+  const c = COMUNIDADES[i % COMUNIDADES.length];
+  const id = crypto.randomUUID();
+  const alta = await llamar('POST', '/incidentes', 'demo-guardaparque', {
+    id,
+    latitud: c.latitud + km / 111.195,
+    longitud: c.longitud,
+    precisionMetros: 8,
+  });
+  assert.equal(alta.estado, 201);
+  if (conCarta) {
+    const carta = await llamar('POST', `/incidentes/${id}/carta-municipal`, 'demo-ugr', pdf(id), { 'x-fecha-emision': '2026-09-28' });
+    assert.equal(carta.estado, 201);
+  }
+  return { id, comunidad: c };
+}
+
+/** Despacha la brigada al foco y, si se pide, confirma la llegada (→ En Combate Activo). */
+async function despachar(foco, brigada, llegar) {
+  const d = await llamar('POST', `/incidentes/${foco.id}/asignaciones`, 'demo-coordinador', { brigadaId: brigada });
+  assert.equal(d.estado, 201, JSON.stringify(d.datos));
+  if (llegar) {
+    const l = await llamar('POST', `/asignaciones/${d.datos.asignacion.id}/llegada`, 'demo-jefe-brigada', {
+      latitud: foco.comunidad.latitud,
+      longitud: foco.comunidad.longitud,
+      precisionMetros: 10,
+    });
+    assert.equal(l.estado, 201);
+  }
+}
+
+async function entrarComo(navegador, token, viewport) {
+  const ctx = await navegador.newContext({ viewport, deviceScaleFactor: 1, locale: 'es-BO' });
+  const p = await ctx.newPage();
+  p.on('pageerror', (e) => console.log(`    [error de la página] ${e.message}`));
+  p.on('dialog', (d) => d.accept());
+  await p.goto(APP);
+  await p.fill('#token', token);
+  await p.click('#form-login button');
+  await p.locator('#vista-principal').waitFor();
+  return { ctx, p };
+}
+
+const pestanasVisibles = (p) =>
+  p.$$eval('#pestanas button', (bs) => bs.filter((b) => !b.hidden).map((b) => b.textContent.trim()));
+const sinDesbordeHorizontal = (p) =>
+  p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+
+/** Abre "ver más" en la columna hasta que la tarjeta del foco quede visible y la devuelve. */
+async function tarjetaDelPanel(p, id) {
+  const t = p.locator(`#kanban .tarjeta-foco[data-id="${id}"]`);
+  await p.locator('#kanban .columna').first().waitFor();
+  for (let i = 0; i < 10 && (await t.count()) === 0; i++) {
+    const mas = p.locator('#kanban .ver-mas').first();
+    if ((await mas.count()) === 0) break;
+    await mas.click();
+  }
+  return t;
 }
 
 const tarjeta = (pagina, texto) => pagina.locator('#lista-reportes li.reporte', { hasText: texto }).first();
@@ -225,6 +317,155 @@ async function main() {
       const evaluacion = await api(`/incidentes/${id}/evaluacion`);
       assert.equal(evaluacion.datos.nivelRiesgo, 'Alto');
       assert.equal(evaluacion.datos.origenRiesgo, 'Manual');
+      await ctx.close();
+    });
+
+    // ---------------- Bolt 3: panel COED, cartas municipales y estados tácticos ----------------
+    const focos = [];
+    await paso('Bolt 3 · preparación: 60 focos simulados (1 de cada 3 con carta) y brigadas en 4 estados', async () => {
+      for (let i = 0; i < 60; i++) focos.push(await focoSimulado(i, 1 + (i % 14), i % 3 === 0));
+      // B1 en desplazamiento, B4 en combate, B3 (del jefe demo) en combate; B2 sigue disponible.
+      const conCarta = focos.filter((_, i) => i % 3 === 0);
+      await despachar(conCarta[0], BRIGADA(1), false);
+      await despachar(conCarta[1], BRIGADA(4), true);
+      await despachar(conCarta[2], BRIGADA(3), true);
+    });
+
+    await paso('RF-08: el jefe de brigada reporta "En Liquidación / Por finalizar" desde su teléfono', async () => {
+      const { ctx, p } = await entrarComo(navegador, 'demo-jefe-brigada', { width: 360, height: 740 });
+      assert.deepEqual(await pestanasVisibles(p), ['Reportar', 'Mi brigada']);
+      await p.click('#tab-brigada');
+      await p.locator('#estado-mi-brigada', { hasText: 'En combate activo' }).waitFor();
+      assert.match(await p.textContent('#mi-brigada'), /Brigada Departamental 3[\s\S]*Foco asignado: FOCO-/);
+      await p.click('#reportar-liquidacion');
+      await p.locator('#estado-mi-brigada', { hasText: 'En liquidación' }).waitFor();
+      assert.ok(await p.locator('#reportar-liquidacion').isHidden(), 'el botón solo aparece En Combate Activo');
+      assert.match(await p.textContent('#mi-brigada'), /En liquidación/);
+      await p.screenshot({ path: `${CAPTURAS}06-mi-brigada-liquidacion.png`, fullPage: true });
+      await ctx.close();
+    });
+
+    let focoUgr;
+    await paso('CU-08: la UGR adjunta la foto de la carta (comprimida a ≤1 MB) y queda "por validar"', async () => {
+      focoUgr = await focoSimulado(0, 3, false);
+      const { ctx, p } = await entrarComo(navegador, 'demo-ugr', { width: 360, height: 740 });
+      assert.deepEqual(await pestanasVisibles(p), ['Reportar', 'Cartas']);
+      await p.click('#tab-cartas');
+      const item = p.locator(`#lista-cartas li[data-id="${focoUgr.id}"]`);
+      await item.waitFor();
+      const foto = pngRuido(1600, 1200);
+      assert.ok(foto.length > 1024 * 1024, 'la foto de la carta debe superar 1 MB');
+      await item.locator('input[type="file"]').setInputFiles({ name: 'carta.png', mimeType: 'image/png', buffer: foto });
+      await item.locator('.peso-carta', { hasText: 'comprimida' }).waitFor();
+      const kb = parseInt((await item.locator('.peso-carta').textContent()).split('· ')[1], 10);
+      assert.ok(kb <= 1024, `carta comprimida a ${kb} KB`);
+      await item.locator('button[type="submit"]').click();
+      await item.locator('.destacado', { hasText: 'Carta adjunta' }).waitFor();
+      await p.screenshot({ path: `${CAPTURAS}07-carta-ugr.png`, fullPage: true });
+      const carta = await api(`/incidentes/${focoUgr.id}/carta-municipal`);
+      assert.equal(carta.datos.estado, 'por_validar');
+      assert.equal(carta.datos.tipoMime, 'image/jpeg');
+      await ctx.close();
+    });
+
+    await paso('HU-3.1 / RNF-05: panel COED a 1366 px con 60+ focos, 4 columnas, contadores y 4 estados de brigada', async () => {
+      const { ctx, p } = await entrarComo(navegador, 'demo-coordinador', { width: 1366, height: 900 });
+      assert.deepEqual(await pestanasVisibles(p), ['Reportar', 'Panel COED', 'Evaluación', 'Cartas']);
+      await p.click('#tab-panel');
+      await p.locator('#kanban .tarjeta-foco').first().waitFor();
+      const panel = (await api('/panel')).datos;
+      assert.ok(panel.resumen.total >= 60, `focos activos: ${panel.resumen.total}`);
+      assert.equal(await p.locator('#kanban .columna').count(), 4);
+      // Contadores de columna = API; "ver más" limita a 15 tarjetas visibles por columna.
+      for (const c of ['Nuevo', 'Asignado', 'En_Atencion', 'En_Liquidacion']) {
+        const col = p.locator(`#kanban .columna[data-columna="${c}"]`);
+        const { total, conCarta } = panel.resumen.columnas[c];
+        assert.equal(await col.locator('.contador-columna').textContent(), `${total} · ${conCarta} con carta`);
+        assert.equal(await col.locator('.tarjeta-foco').count(), Math.min(15, total));
+      }
+      const nuevo = p.locator('#kanban .columna[data-columna="Nuevo"]');
+      await nuevo.locator('.ver-mas').click();
+      assert.equal(await nuevo.locator('.tarjeta-foco').count(), Math.min(30, panel.resumen.columnas.Nuevo.total));
+      assert.ok(await sinDesbordeHorizontal(p), 'el panel no desborda la página a lo ancho');
+      // 4 estados de brigada: conteo, lista y símbolos del mapa.
+      for (const e of ['Disponible', 'En_Desplazamiento', 'En_Combate_Activo', 'En_Liquidacion']) {
+        assert.match(await p.textContent(`#conteo-brigadas li[data-estado="${e}"]`), /1 /, e);
+        assert.equal(await p.locator(`#lista-brigadas li[data-estado="${e}"]`).count(), 1, e);
+      }
+      const simbolos = await p.$$eval('#mapa-panel .mapa-brigada', (ts) => ts.map((t) => t.textContent.slice(0, 1)).sort());
+      assert.deepEqual(simbolos, ['#', '*', '^', '~']); // En combate, Disponible, En desplazamiento, En liquidación
+      const grupos = await p.locator('#mapa-panel .mapa-foco').count();
+      assert.ok(grupos > 0 && grupos < panel.resumen.total, `focos agrupados en ${grupos} marcas`);
+      await p.screenshot({ path: `${CAPTURAS}08-panel-coed-1366.png`, fullPage: true });
+
+      // RF-07: filtros de trámite municipal; las tarjetas y contadores cambian.
+      const cartasVisibles = () => p.$$eval('#kanban .tarjeta-foco', (ts) => ts.map((t) => t.dataset.carta));
+      const esperarResumen = (visibles) => p.locator('#resumen-panel', { hasText: `Mostrando ${visibles} de` }).waitFor();
+      await p.check('input[name="carta"][value="por_validar"]');
+      await esperarResumen((await api('/panel?carta=por_validar')).datos.resumen.visibles);
+      assert.ok((await cartasVisibles()).every((c) => c === 'por_validar'));
+      assert.equal(await (await tarjetaDelPanel(p, focoUgr.id)).count(), 1);
+      await p.check('input[name="carta"][value="sin"]');
+      const sin = (await api('/panel?carta=sin')).datos;
+      await esperarResumen(sin.resumen.visibles);
+      assert.ok((await cartasVisibles()).every((c) => c === 'sin_carta' || c === 'rechazada'));
+      assert.equal(await p.locator(`#kanban .tarjeta-foco[data-id="${focoUgr.id}"]`).count(), 0);
+      assert.equal(
+        await p.locator('#kanban .columna[data-columna="Nuevo"] .contador-columna').textContent(),
+        `${sin.resumen.columnas.Nuevo.total} · 0 con carta`,
+      );
+      await p.screenshot({ path: `${CAPTURAS}09-panel-filtro-sin-carta.png`, fullPage: true });
+      await p.check('input[name="carta"][value="con"]');
+      await esperarResumen((await api('/panel?carta=con')).datos.resumen.visibles);
+      assert.ok((await cartasVisibles()).every((c) => c === 'por_validar' || c === 'validada'));
+      await p.check('input[name="carta"][value=""]');
+      await esperarResumen((await api('/panel')).datos.resumen.visibles);
+
+      // CU-08: el coordinador abre la tarjeta, ve la carta y la valida → [Con carta].
+      await (await tarjetaDelPanel(p, focoUgr.id)).locator('button').click();
+      await p.locator('#detalle-foco').waitFor();
+      assert.equal(await p.textContent('#titulo'), 'Evaluación de riesgo');
+      await p.locator('#carta-estado', { hasText: 'Por validar' }).waitFor();
+      await p.click('#ver-carta');
+      await p.locator('#carta-imagen').waitFor();
+      assert.ok(await p.$eval('#carta-imagen', (i) => i.complete && i.naturalWidth > 0), 'la imagen de la carta se ve');
+      await p.click('#validar-carta');
+      await p.locator('#mensaje-carta', { hasText: '✔ Carta validada' }).waitFor();
+      await p.locator('#carta-estado', { hasText: 'Con carta' }).waitFor();
+      await p.screenshot({ path: `${CAPTURAS}10-carta-validada.png`, fullPage: true });
+      await p.click('#tab-panel');
+      await p.check('input[name="carta"][value="con"]');
+      await esperarResumen((await api('/panel?carta=con')).datos.resumen.visibles);
+      assert.equal(await (await tarjetaDelPanel(p, focoUgr.id)).getAttribute('data-carta'), 'validada');
+
+      // Rechazo con motivo (≥15): bloquea el despacho.
+      const otro = focos.filter((_, i) => i % 3 === 0)[5];
+      await p.check('input[name="carta"][value=""]');
+      await esperarResumen((await api('/panel')).datos.resumen.visibles);
+      await (await tarjetaDelPanel(p, otro.id)).locator('button').click();
+      await p.locator('#carta-estado', { hasText: 'Por validar' }).waitFor();
+      await p.fill('#motivo-rechazo', 'Falta la firma');
+      assert.ok(await p.locator('#rechazar-carta').isDisabled(), 'rechazo bloqueado con 14 caracteres');
+      await p.fill('#motivo-rechazo', 'Falta la firma del alcalde');
+      await p.click('#rechazar-carta');
+      await p.locator('#carta-estado', { hasText: 'Rechazada' }).waitFor();
+      const despacho = await llamar('POST', `/incidentes/${otro.id}/asignaciones`, 'demo-coordinador', { brigadaId: BRIGADA(2) });
+      assert.equal(despacho.estado, 422);
+
+      // RF-08: el coordinador libera la brigada en liquidación.
+      await p.click('#tab-panel');
+      const b3 = p.locator(`#lista-brigadas li[data-id="${BRIGADA(3)}"]`);
+      await b3.locator('.liberar').click();
+      await p.locator(`#lista-brigadas li[data-id="${BRIGADA(3)}"][data-estado="Disponible"]`).waitFor();
+      await ctx.close();
+    });
+
+    await paso('RNF-05: el panel se usa desde un teléfono de 360 px sin desbordar', async () => {
+      const { ctx, p } = await entrarComo(navegador, 'demo-coordinador', { width: 360, height: 740 });
+      await p.click('#tab-panel');
+      await p.locator('#kanban .tarjeta-foco').first().waitFor();
+      assert.ok(await sinDesbordeHorizontal(p), 'sin desplazamiento horizontal a 360 px');
+      await p.screenshot({ path: `${CAPTURAS}11-panel-coed-360.png`, fullPage: false });
       await ctx.close();
     });
 

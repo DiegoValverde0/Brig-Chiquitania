@@ -20,6 +20,12 @@
     return document.getElementById(id);
   };
   var actual = null; // evaluación del foco abierto
+  var urlCarta = null; // documento descargado (object URL), se libera al cambiar de foco
+  var ETIQUETA_CARTA = {
+    por_validar: 'Recibida, por validar: ya habilita el despacho',
+    validada: 'Validada por el coordinador',
+    rechazada: 'Rechazada: el despacho queda bloqueado hasta que la UGR adjunte otra',
+  };
 
   function texto(el, valor) {
     el.textContent = valor;
@@ -110,6 +116,7 @@
 
   function cerrar() {
     actual = null;
+    liberarDocumento();
     $('detalle-foco').hidden = true;
     $('lista-focos').hidden = false;
     cargarLista();
@@ -159,6 +166,8 @@
     texto($('mensaje-reclasificacion'), '');
     validar();
 
+    pintarCarta();
+
     var historial = $('detalle-historial');
     historial.innerHTML = '';
     if (!e.reclasificaciones.length) {
@@ -182,6 +191,110 @@
       li.appendChild(motivo);
       historial.appendChild(li);
     });
+  }
+
+  // ---------- carta municipal (CU-08, Ley 602) ----------
+
+  function liberarDocumento() {
+    if (urlCarta) URL.revokeObjectURL(urlCarta);
+    urlCarta = null;
+    $('carta-imagen').hidden = true;
+    $('carta-imagen').removeAttribute('src');
+    $('carta-enlace').hidden = true;
+    $('carta-enlace').removeAttribute('href');
+  }
+
+  function pintarCarta() {
+    var c = actual.carta;
+    liberarDocumento();
+    texto($('mensaje-carta'), '');
+    $('motivo-rechazo').value = '';
+    validarMotivo();
+    var estado = $('carta-estado');
+    estado.innerHTML = '';
+    if (!c) {
+      estado.appendChild(insigniaCarta(document.createElement('span'), 'sin_carta'));
+      estado.appendChild(document.createTextNode(' La UGR aún no adjuntó la carta: el despacho está bloqueado.'));
+    } else {
+      estado.appendChild(insigniaCarta(document.createElement('span'), c.estado));
+      var linea = ' ' + ETIQUETA_CARTA[c.estado] + ' · emitida el ' + c.fechaEmision;
+      if (c.tieneArchivo) linea += ' · ' + (c.tipoMime === 'application/pdf' ? 'PDF' : 'imagen') + ', ' + c.pesoKB + ' KB';
+      else linea += ' · referencia sin archivo (anterior al Bolt 3)';
+      estado.appendChild(document.createTextNode(linea));
+      if (c.motivoRechazo) {
+        var motivo = document.createElement('span');
+        motivo.className = 'bloque';
+        motivo.textContent = 'Motivo: ' + c.motivoRechazo;
+        estado.appendChild(motivo);
+      }
+    }
+    var abierta = actual.estado !== 'Cerrado';
+    $('carta-documento').hidden = !(c && c.tieneArchivo);
+    $('carta-acciones').hidden = !(c && c.tieneArchivo && c.estado !== 'rechazada' && abierta);
+    $('validar-carta').hidden = !(c && c.estado === 'por_validar');
+  }
+
+  function insigniaCarta(el, estado) {
+    var etiquetas = { sin_carta: 'Sin carta', por_validar: 'Por validar', validada: 'Con carta', rechazada: 'Rechazada' };
+    el.textContent = etiquetas[estado];
+    el.className = 'insignia carta-' + estado;
+    return el;
+  }
+
+  function verDocumento() {
+    var boton = $('ver-carta');
+    boton.disabled = true;
+    texto($('mensaje-carta'), 'Descargando…');
+    BrcApi.blob('/incidentes/' + actual.id + '/carta-municipal/archivo').then(
+      function (res) {
+        boton.disabled = false;
+        texto($('mensaje-carta'), '');
+        liberarDocumento();
+        urlCarta = URL.createObjectURL(res.datos);
+        var esPdf = res.datos.type === 'application/pdf';
+        if (!esPdf) {
+          $('carta-imagen').src = urlCarta;
+          $('carta-imagen').hidden = false;
+        }
+        var enlace = $('carta-enlace');
+        enlace.href = urlCarta;
+        enlace.setAttribute('download', 'carta-FOCO-' + actual.id.slice(0, 8) + (esPdf ? '.pdf' : '.jpg'));
+        enlace.hidden = false;
+      },
+      function (e) {
+        boton.disabled = false;
+        texto($('mensaje-carta'), 'No se pudo descargar: ' + e.message);
+      },
+    );
+  }
+
+  function validarMotivo() {
+    var largo = $('motivo-rechazo').value.trim().length;
+    var contador = $('contador-motivo');
+    contador.textContent = largo + '/' + MINIMO + ' car.';
+    contador.className = 'contador ' + (largo >= MINIMO ? 'ok' : 'falta');
+    $('rechazar-carta').disabled = !(largo >= MINIMO && largo <= 500);
+  }
+
+  function verificarCarta(resultado) {
+    var cuerpo = { resultado: resultado };
+    if (resultado === 'Rechazada') cuerpo.motivo = $('motivo-rechazo').value;
+    $('validar-carta').disabled = true;
+    $('rechazar-carta').disabled = true;
+    texto($('mensaje-carta'), 'Guardando…');
+    BrcApi.post('/incidentes/' + actual.id + '/carta-municipal/verificacion', cuerpo).then(
+      function (res) {
+        actual.carta = res.datos;
+        $('validar-carta').disabled = false;
+        pintarCarta();
+        texto($('mensaje-carta'), resultado === 'Validada' ? '✔ Carta validada (queda auditado).' : '✔ Carta rechazada: el despacho queda bloqueado.');
+      },
+      function (e) {
+        $('validar-carta').disabled = false;
+        validarMotivo();
+        texto($('mensaje-carta'), 'No se guardó: ' + e.message);
+      },
+    );
   }
 
   // ---------- reclasificación (HU-2.2) ----------
@@ -228,7 +341,25 @@
       r.addEventListener('change', validar);
     });
     $('form-reclasificar').addEventListener('submit', guardar);
+    $('ver-carta').addEventListener('click', verDocumento);
+    $('validar-carta').addEventListener('click', function () {
+      verificarCarta('Validada');
+    });
+    $('rechazar-carta').addEventListener('click', function () {
+      verificarCarta('Rechazada');
+    });
+    $('motivo-rechazo').addEventListener('input', validarMotivo);
   }
 
-  global.BrcEvaluacion = { iniciar: iniciar, mostrar: cargarLista };
+  /** Muestra la lista; con un id (tarjeta del panel COED) abre directamente ese foco. */
+  function mostrar(id) {
+    if (!id) {
+      $('detalle-foco').hidden = true;
+      $('lista-focos').hidden = false;
+      return cargarLista();
+    }
+    return abrir(id);
+  }
+
+  global.BrcEvaluacion = { iniciar: iniciar, mostrar: mostrar, insigniaCarta: insigniaCarta };
 })(self);

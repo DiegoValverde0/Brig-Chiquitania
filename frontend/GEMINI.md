@@ -4,11 +4,15 @@ Skill específica para el agente de UI (frontend). Complementa (no reemplaza) `/
 Por decisión del PO (29/09/2026), **Claude mantiene el frontend temporalmente**; estas reglas valen para
 cualquier agente que lo tome.
 
-## Estado actual (Bolts 1 y 2)
+## Estado actual (Bolts 1 a 3)
 `frontend/app/`: app web instalable (PWA) del **CU-01 "Reportar foco de calor"** para el Guardaparque/Comunario,
-según el wireframe de la Actividad 3 (Figura 7), y desde el Bolt 2 la pestaña **"Evaluación de riesgo"** del
-Coordinador (CU-02, Figura 8), visible solo para ese rol. Las demás pantallas del coordinador llegan en los bolts
-siguientes.
+según el wireframe de la Actividad 3 (Figura 7), con pestañas por rol (`PESTANAS_POR_ROL` en `app.js`):
+- **Coordinador:** Reportar, **Panel COED** (Figura 9, Bolt 3), **Evaluación** de riesgo (Figura 8, Bolt 2, con la
+  sección de carta municipal) y **Cartas** (contingencia).
+- **Responsable UGR:** Reportar y **Cartas** (adjuntar la carta municipal, Ley 602).
+- **Jefe de Brigada:** Reportar y **Mi brigada** ("En Liquidación / Por finalizar").
+- **Guardaparque:** solo Reportar (sin barra de pestañas).
+Las pantallas del COED necesitan conexión; solo el reporte es offline-first.
 
 ```
 frontend/
@@ -19,13 +23,16 @@ frontend/
 │   ├── js/geo.js         # haversine y punto por rumbo (idéntico a backend/src/common/geo.ts)
 │   ├── js/almacen.js     # IndexedDB (cola de reportes con foto) + ajustes en localStorage
 │   ├── js/api.js         # fetch con token y tiempo límite
-│   ├── js/foto.js        # compresión en el teléfono a ≤100 KB
+│   ├── js/foto.js        # compresión en el teléfono a ≤100 KB (o al límite que se pida: carta ≤1 MB)
 │   ├── js/sync.js        # cola offline-first idempotente y catálogo comunal
-│   ├── js/evaluacion.js  # pestaña "Evaluación de riesgo" del coordinador (CU-02, Figura 8; Bolt 2)
+│   ├── js/evaluacion.js  # "Evaluación de riesgo" (CU-02, Figura 8; Bolt 2) + validar/rechazar la carta (Bolt 3)
+│   ├── js/panel.js       # Kanban del COED: filtros, contadores, "ver más", mapa SVG esquemático, brigadas (Bolt 3)
+│   ├── js/cartas.js      # bandeja de la UGR: adjuntar PDF/foto de la carta ≤1 MB (Bolt 3)
+│   ├── js/brigada.js     # vista del jefe de brigada (RF-08, Bolt 3)
 │   ├── js/app.js         # interfaz
 │   └── sw.js             # service worker: la app abre sin red (subir VERSION al cambiar archivos)
 ├── nginx.conf            # sirve app/ y pasa /api al backend
-└── pruebas/              # prueba en Chromium real (Playwright): offline, cola, SMS simulado, memoria
+└── pruebas/              # prueba en Chromium real (Playwright): offline, cola, SMS, evaluación, panel, cartas, memoria
 ```
 
 ## Reglas
@@ -42,6 +49,12 @@ frontend/
 - Botones grandes (≥44 px, uso con guantes), textos en español llano, alto contraste para exteriores.
 - El codec SMS y la geografía se duplican en backend y frontend: cambiar ambos a la vez (las pruebas del backend
   verifican que coincidan).
+- **Mapa (RF-01):** solo el mapa esquemático propio en SVG de `panel.js` (recuadro fijo de la Chiquitanía,
+  comunidades del catálogo offline, focos agrupados por cuadrícula de 0,3°). Nada de teselas ni librerías de mapas.
+- **RNF-05:** el panel debe seguir legible con 50+ focos: máximo 15 tarjetas por columna antes de "ver más",
+  desplazamiento propio por columna, y sin desplazamiento horizontal a 360 px.
+- Estados de brigada con sus símbolos de la leyenda: `*` Disponible, `^` En desplazamiento, `#` En combate,
+  `~` En liquidación.
 
 ## Pruebas
 `cd frontend/pruebas && npm ci && APP=http://localhost:8080 npm test` (API en marcha con la semilla; Chromium en

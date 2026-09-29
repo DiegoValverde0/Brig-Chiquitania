@@ -10,6 +10,7 @@ import { exigirEnum, exigirObjeto } from '../../common/validacion';
 import { HistorialEstado } from '../operaciones/entities/historial-estado.entity';
 import { TipoEventoHistorial } from '../operaciones/enums/tipo-evento-historial.enum';
 import { aEntradaHistorial, EntradaHistorial, HistorialEstadoService } from '../operaciones/historial-estado.service';
+import { vistaCarta, VistaCarta } from './carta-municipal.service';
 import { Incidente } from './entities/incidente.entity';
 import { EstadoIncidente } from './enums/estado-incidente.enum';
 import { NivelRiesgo } from './enums/nivel-riesgo.enum';
@@ -33,6 +34,8 @@ export interface EvaluacionIncidente {
   comunidad: { id: string; nombre: string } | null;
   coordenada: { latitud: number; longitud: number; precisionMetros: number | null };
   reclasificaciones: EntradaHistorial[];
+  /** Trámite municipal (Ley 602, Bolt 3): para validarla o rechazarla desde el mismo detalle. */
+  carta: VistaCarta | null;
 }
 
 @Injectable()
@@ -45,7 +48,7 @@ export class EvaluacionService {
   async evaluacion(incidenteId: string): Promise<EvaluacionIncidente> {
     const i = await this.dataSource
       .getRepository(Incidente)
-      .findOne({ where: { id: incidenteId }, relations: { comunidad: true } });
+      .findOne({ where: { id: incidenteId }, relations: { comunidad: true, cartaMunicipal: true } });
     if (!i) throw new NotFoundException('Incidente no encontrado');
     const reclasificaciones = await this.dataSource.getRepository(HistorialEstado).find({
       where: { incidente: { id: incidenteId }, tipoEvento: TipoEventoHistorial.Reclasificacion },
@@ -67,6 +70,7 @@ export class EvaluacionService {
         precisionMetros: i.coordenada.precisionMetros,
       },
       reclasificaciones: reclasificaciones.map(aEntradaHistorial),
+      carta: i.cartaMunicipal ? vistaCarta(i.cartaMunicipal) : null,
     };
   }
 

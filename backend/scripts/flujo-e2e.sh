@@ -25,7 +25,10 @@ get "$C" /panel | campo 'r.incidentes.Nuevo.length+" foco(s) en Nuevo"'
 echo "3) Brigada sugerida"
 get "$C" "/incidentes/$ID/brigadas-sugeridas" | campo 'r[0].nombre+" a "+r[0].distanciaKm+" km"'
 echo "4) Carta municipal (Ley 602)"
-post "$C" "/incidentes/$ID/carta-municipal" '{"archivoDigital":"cartas/ejemplo.pdf","fechaEmision":"2026-09-28"}' | campo 'r.estadoTramite'
+printf '%%PDF-1.4\n%% Carta municipal de ejemplo %s\n%%%%EOF\n' "$ID" \
+  | curl -sf -X POST "$API/incidentes/$ID/carta-municipal" -H "Authorization: Bearer $C" \
+      -H 'Content-Type: application/pdf' -H 'x-fecha-emision: 2026-09-28' --data-binary @- \
+  | campo 'r.estadoTramite+" ("+r.estado+")"'
 echo "5) Despacho confirmado por el coordinador"
 ASIG="$(post "$C" "/incidentes/$ID/asignaciones" "{\"brigadaId\":\"$BRIGADA\"}" | campo 'r.asignacion.id')"
 echo "   asignación $ASIG"

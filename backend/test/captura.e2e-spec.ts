@@ -7,7 +7,7 @@ import { DataSource } from 'typeorm';
 import { codificarReporte, LARGO_MAXIMO_SMS, uuidACorto } from '../src/core/sync/sms/codec-sms';
 import { Rumbo } from '../src/core/reporte/enums/rumbo.enum';
 import { BRIGADAS, COMUNIDADES } from '../src/semilla';
-import { Cliente, crearAppPruebas, TOKENS } from './app-pruebas';
+import { Cliente, crearAppPruebas, subirCarta, TOKENS } from './app-pruebas';
 
 /**
  * DoD del Bolt 1 (Release 0.2): captura resiliente y contacto comunal.
@@ -253,7 +253,7 @@ describe('Captura resiliente y contacto comunal (Bolt 1)', () => {
       const id = randomUUID();
       const reporte = await reportar({ id, latitud: -15.91, longitud: -61.2, precisionMetros: 5 }).expect(201);
       expect(reporte.body).toMatchObject({ nivelRiesgo: 'Alto', contactoComunal: null });
-      await ugr.post(`/api/incidentes/${id}/carta-municipal`).send({ archivoDigital: 'cartas/ne.pdf', fechaEmision: '2026-09-29' }).expect(201);
+      await subirCarta(ugr, id).expect(201);
       const brigada = BRIGADAS[0].id;
       const bloqueado = await coordinador.post(`/api/incidentes/${id}/asignaciones`).send({ brigadaId: brigada }).expect(422);
       expect(bloqueado.body.message).toMatch(/contacto comunal/);

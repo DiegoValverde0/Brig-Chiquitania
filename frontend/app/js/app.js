@@ -73,27 +73,59 @@
   function cerrarSesion() {
     BrcAjustes.fijar('token', null);
     BrcAjustes.fijar('usuario', null);
+    if (pestanaActual) elegirPestana('reportar');
     $('pestanas').hidden = true;
     mostrar('login');
   }
 
-  /** Pestañas por rol: solo el Coordinador ve "Evaluación de riesgo" (la API también lo exige: RNF-08). */
-  function elegirPestana(nombre) {
-    var evaluar = nombre === 'evaluacion';
-    $('panel-evaluacion').hidden = !evaluar;
-    $('panel-reportar').hidden = evaluar;
-    $('tab-evaluacion').setAttribute('aria-selected', String(evaluar));
-    $('tab-reportar').setAttribute('aria-selected', String(!evaluar));
-    texto($('titulo'), evaluar ? 'Evaluación de riesgo' : 'Reportar foco de calor');
-    if (evaluar) BrcEvaluacion.mostrar();
-    else detenerGps();
+  /**
+   * Pestañas por rol (la API exige lo mismo: RNF-08). Coordinador: panel COED, evaluación y cartas (contingencia);
+   * UGR: cartas municipales; Jefe de Brigada: su brigada. Todos pueden reportar un foco.
+   */
+  var PESTANAS = {
+    reportar: { titulo: 'Reportar foco de calor' },
+    panel: { titulo: 'Panel COED', ancha: true, modulo: function () { return self.BrcPanel; } },
+    evaluacion: { titulo: 'Evaluación de riesgo', modulo: function () { return self.BrcEvaluacion; } },
+    cartas: { titulo: 'Cartas municipales', modulo: function () { return self.BrcCartas; } },
+    brigada: { titulo: 'Mi brigada', modulo: function () { return self.BrcBrigada; } },
+  };
+  var PESTANAS_POR_ROL = {
+    Coordinador: ['reportar', 'panel', 'evaluacion', 'cartas'],
+    ResponsableUGR: ['reportar', 'cartas'],
+    JefeBrigada: ['reportar', 'brigada'],
+  };
+  var pestanaActual = null;
+
+  function elegirPestana(nombre, extra) {
+    Object.keys(PESTANAS).forEach(function (n) {
+      var activa = n === nombre;
+      $('panel-' + n).hidden = !activa;
+      $('tab-' + n).setAttribute('aria-selected', String(activa));
+      var modulo = PESTANAS[n].modulo && PESTANAS[n].modulo();
+      if (!activa && n === pestanaActual && modulo && modulo.ocultar) modulo.ocultar();
+    });
+    pestanaActual = nombre;
+    var p = PESTANAS[nombre];
+    texto($('titulo'), p.titulo);
+    $('vista-principal').className = 'vista' + (p.ancha ? ' vista-ancha' : '');
+    if (nombre !== 'reportar') detenerGps();
+    var modulo = p.modulo && p.modulo();
+    if (modulo) modulo.mostrar(extra);
+  }
+
+  function pintarPestanas(usuario) {
+    var visibles = (usuario && PESTANAS_POR_ROL[usuario.rol]) || ['reportar'];
+    Object.keys(PESTANAS).forEach(function (n) {
+      $('tab-' + n).hidden = visibles.indexOf(n) < 0;
+    });
+    $('pestanas').hidden = visibles.length < 2;
+    $('pestanas').style.gridTemplateColumns = 'repeat(' + visibles.length + ', 1fr)';
   }
 
   function entrar() {
     var usuario = BrcAjustes.obtener('usuario', null);
     texto($('usuario'), usuario ? usuario.nombre + ' · ' + usuario.rol : '');
-    var esCoordinador = !!usuario && usuario.rol === 'Coordinador';
-    $('pestanas').hidden = !esCoordinador;
+    pintarPestanas(usuario);
     elegirPestana('reportar');
     mostrar('principal');
     cargarCatalogo();
@@ -460,11 +492,17 @@
 
   function iniciar() {
     BrcEvaluacion.iniciar();
-    $('tab-reportar').addEventListener('click', function () {
-      elegirPestana('reportar');
+    BrcPanel.iniciar({
+      abrirFoco: function (id) {
+        elegirPestana('evaluacion', id);
+      },
     });
-    $('tab-evaluacion').addEventListener('click', function () {
-      elegirPestana('evaluacion');
+    BrcCartas.iniciar();
+    BrcBrigada.iniciar();
+    Object.keys(PESTANAS).forEach(function (n) {
+      $('tab-' + n).addEventListener('click', function () {
+        elegirPestana(n);
+      });
     });
     $('form-login').addEventListener('submit', iniciarSesion);
     $('form-reporte').addEventListener('submit', enviar);
