@@ -18,14 +18,37 @@
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { deflateSync, crc32 } from 'node:zlib';
 import { chromium } from 'playwright-core';
 
 const APP = process.env.APP ?? 'http://localhost:3000';
-const CHROMIUM = process.env.CHROMIUM ?? '/opt/pw-browsers/chromium';
+const CHROMIUM = process.env.CHROMIUM ?? buscarChrome();
 const CERCA_DE_CONCEPCION = { latitude: -16.1153, longitude: -62.0258, accuracy: 8 };
-const CAPTURAS = new URL('./capturas/', import.meta.url).pathname;
+// fileURLToPath y no `.pathname`: en Windows `.pathname` da "/C:/..." y termina en "C:\\C:\\...".
+const CAPTURAS = fileURLToPath(new URL('./capturas/', import.meta.url));
+
+/** Sin la variable CHROMIUM, usa el Chrome/Chromium instalado en su ruta habitual (Windows, macOS o Linux). */
+function buscarChrome() {
+  const windows = [process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA]
+    .filter(Boolean)
+    .map((base) => `${base}\\Google\\Chrome\\Application\\chrome.exe`);
+  const candidatos = [
+    '/opt/pw-browsers/chromium',
+    ...windows,
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+  ];
+  const encontrado = candidatos.find((ruta) => existsSync(ruta));
+  if (!encontrado) {
+    console.error('No se encontró Chrome/Chromium. Indique su ruta en la variable CHROMIUM (ver GUIA_DESARROLLO.md §4).');
+    process.exit(1);
+  }
+  return encontrado;
+}
 
 const resultados = [];
 async function paso(nombre, fn) {
@@ -686,19 +709,27 @@ async function main() {
       //    ~100 MB, así que el RSS absoluto no representa al Android de 1 GB; esa medición final se hace en el
       //    dispositivo de referencia (queda como tarea de campo del Bolt 1).
       await contexto.close();
-      const rssMaximoRenderer = () =>
-        Math.max(
-          ...execSync("ps -eo rss,args | grep -- '--type=renderer' | grep -v grep", { encoding: 'utf8' })
-            .trim()
-            .split('\n')
-            .map((l) => parseInt(l.trim(), 10) / 1024),
-        );
+      // Solo los renderizadores de ESTE navegador (vía CDP), no los del Chrome personal que esté abierto.
+      const sesionNavegador = await navegador.newBrowserCDPSession();
+      const rssMaximoRenderer = async () => {
+        const { processInfo } = await sesionNavegador.send('SystemInfo.getProcessInfo');
+        const pids = processInfo.filter((x) => x.type === 'renderer').map((x) => x.id);
+        const salida =
+          process.platform === 'win32'
+            ? execSync(`powershell -NoProfile -Command "(Get-Process -Id ${pids.join(',')}).WorkingSet64"`, { encoding: 'utf8' })
+            : execSync(`ps -o rss= -p ${pids.join(',')}`, { encoding: 'utf8' });
+        const mb = salida
+          .trim()
+          .split(/\s+/)
+          .map((v) => parseInt(v, 10) / (process.platform === 'win32' ? 1048576 : 1024));
+        return Math.max(...mb);
+      };
       const medir = async (preparar) => {
         const ctx = await navegador.newContext({ viewport: { width: 360, height: 740 }, deviceScaleFactor: 1 });
         const p = await ctx.newPage();
         await preparar(ctx, p);
         await p.waitForTimeout(1500);
-        const mb = rssMaximoRenderer();
+        const mb = await rssMaximoRenderer();
         await ctx.close();
         return mb;
       };

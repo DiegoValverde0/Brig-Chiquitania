@@ -74,7 +74,7 @@ npm run build                         # verificación de tipos / compilación
 curl localhost:3000/api/health        # {"status":"ok","db":"up"}
 npm test                              # unitarias (sin BD)
 npm run test:e2e                      # flujo E2E contra PostgreSQL (BD chiquitania_test, se recrea)
-sh scripts/flujo-e2e.sh               # mismo flujo por curl contra una API en marcha con semilla
+node scripts/flujo-e2e.mjs            # mismo flujo por API (Node, sin bash) contra una API en marcha con semilla
 node dist/crear-usuario "Nombre" Coordinador   # alta por consola; imprime el token una vez
 ```
 
